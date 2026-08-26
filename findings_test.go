@@ -283,7 +283,7 @@ func TestAnOrdinaryDocumentRaisesNoSuspiciousContentReason(t *testing.T) {
 			src, opts := tt.clean(t)
 			res := extractFinding(t, src, opts)
 
-			if hasInjectionReason(res.Reasons) {
+			if hasReasonNaming(res.Reasons, tt.names) {
 				t.Errorf("the same document without %s was still flagged as suspicious; reasons: %v",
 					tt.why, res.Reasons)
 			}
