@@ -183,10 +183,20 @@ Run `make` with no arguments at any time to list every target.
 | `make docker-eval` | The evaluation harness, with `eval/report` mounted back out |
 | `make docker-clean` | Remove the images |
 
-The container is worth knowing about for one specific reason: it ships
-Tesseract's English language data, so the six engine-backed tests in
+The container is worth knowing about for two specific reasons.
+
+It ships Tesseract's English language data, so the six engine-backed tests in
 `ocr/tesseract` that skip on a machine without a language pack actually run
 there.
+
+And it pins the Go toolchain. `make vuln` reports vulnerabilities in **the
+standard library of whichever Go you are running**, not only in ovrin — so on
+an older toolchain it fails with a long list that no change to this repository
+can fix. If that happens, either upgrade Go or run `make docker-ci`, which uses
+a pinned modern one. See
+[SECURITY.md](SECURITY.md#which-go-toolchain-you-need) for why the `go 1.22` in
+`go.mod` is a language floor and not a claim that 1.22.0 is safe to run this
+on.
 
 ### Working on one module
 

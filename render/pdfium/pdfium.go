@@ -237,7 +237,10 @@ func (r *Renderer) render(ctx context.Context, doc ovrin.Document, page, dpi int
 		return result{err: renderErr(page, ovrin.ErrInternal,
 			"a PDFium instance could not be taken from its pool").WithCause(err)}
 	}
-	defer inst.Close()
+	// Returning the instance to its pool. A failure here cannot be reported
+	// without discarding the render's own error, which is the one the caller
+	// needs, and there is nothing this function could do about it either way.
+	defer inst.Close() //nolint:errcheck // nothing actionable, and it would mask the render error
 
 	// A byte slice the caller owns is handed to PDFium as a reference. It is
 	// read-only for the length of this call, which is what ovrin.Document.Data
@@ -247,7 +250,10 @@ func (r *Renderer) render(ctx context.Context, doc ovrin.Document, page, dpi int
 	if err != nil {
 		return result{err: openErr(page, err)}
 	}
-	defer inst.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: opened.Document})
+	// Same: the document is closed before the instance is reused, and a close
+	// failure has no path back to the caller that does not displace a more
+	// useful error.
+	defer inst.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: opened.Document}) //nolint:errcheck // see above
 
 	count, err := inst.FPDF_GetPageCount(&requests.FPDF_GetPageCount{Document: opened.Document})
 	if err != nil {
@@ -385,7 +391,10 @@ func (r *Renderer) ensurePools() error {
 				ReuseWorkers: true,
 			})
 			if err != nil {
-				r.closePools()
+				// Tearing down whatever started before the failure. The
+				// initialisation error below is the one worth keeping; an
+				// error from cleaning up after it is not.
+				r.closePools() //nolint:errcheck // initErr is the more useful error
 				r.initErr = renderErr(0, ovrin.ErrInternal,
 					"the PDFium WebAssembly module could not be started").WithCause(err)
 				return
