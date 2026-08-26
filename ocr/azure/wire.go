@@ -134,11 +134,11 @@ type analyzeResult struct {
 	// caller's log system (rule §7.5).
 	Content string `json:"content"`
 
-	Pages     []page     `json:"pages"`
-	Languages []language `json:"languages"`
+	Pages     []resultPage `json:"pages"`
+	Languages []language   `json:"languages"`
 }
 
-type page struct {
+type resultPage struct {
 	PageNumber int     `json:"pageNumber"`
 	Angle      float64 `json:"angle"`
 	Width      float64 `json:"width"`
@@ -257,7 +257,7 @@ type space struct {
 // measured in pixels, with no size in points to scale against, has no route to
 // points, and returning the pixels unchanged is exactly the silent degradation
 // rule §6.1 forbids.
-func newSpace(p *page, dstW, dstH float64) (space, bool) {
+func newSpace(p *resultPage, dstW, dstH float64) (space, bool) {
 	if dstW > 0 && dstH > 0 && p.Width > 0 && p.Height > 0 {
 		return space{scaleX: dstW / p.Width, scaleY: dstH / p.Height}, true
 	}
@@ -369,7 +369,7 @@ type lineDraft struct {
 // page that was recognised rather than from the response, because a single page
 // sent on its own comes back numbered 1 whatever page of the caller's document
 // it was.
-func normalise(res *analyzeResult, p *page, number int, sp space, raw json.RawMessage) *ovrin.Recognition {
+func normalise(res *analyzeResult, p *resultPage, number int, sp space, raw json.RawMessage) *ovrin.Recognition {
 	pageConf, derived := meanConfidence(p.Words)
 
 	rec := &ovrin.Recognition{
@@ -504,7 +504,7 @@ func meanConfidence(words []word) (float64, bool) {
 // of content it covers, so the page's language is the most confident of those
 // that overlap the page. Ovrin has one field, so the rest are left for
 // [Analysis.JSON].
-func pageLanguage(res *analyzeResult, p *page) string {
+func pageLanguage(res *analyzeResult, p *resultPage) string {
 	best, bestConf := "", -1.0
 	for _, l := range res.Languages {
 		if l.Locale == "" {

@@ -56,6 +56,9 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 	// Collected before the Result is built: assigning Reasons first and
 	// appending afterwards copies the slice header, and the appends then land
 	// somewhere nobody reads.
+	for _, note := range out.notes {
+		a.reasons = append(a.reasons, ReviewReason{Why: note})
+	}
 	for _, n := range out.unread {
 		a.reasons = append(a.reasons, ReviewReason{
 			Why: fmt.Sprintf("page %d could not be read by any configured reading", n),

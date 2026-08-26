@@ -58,7 +58,10 @@ type Analysis struct {
 	// JSON is the Textract response this page was read from, exactly as it
 	// arrived. For a document it is the whole response rather than a slice of
 	// it, because Textract returns one block list covering every page and
-	// cutting it up would produce bytes the service never sent.
+	// cutting it up would produce bytes the service never sent — and where a
+	// document was long enough to arrive in several responses, it is the first
+	// of them, since there is no single document those bytes could be joined
+	// into.
 	JSON json.RawMessage
 
 	// Page is the page within JSON this recognition was taken from, which is

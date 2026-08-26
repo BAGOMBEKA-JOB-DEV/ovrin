@@ -15,6 +15,7 @@ import (
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/img"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/jsonschema"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/normalise"
+	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/office"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/pdf"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/prompt"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
@@ -44,6 +45,10 @@ type reading struct {
 	// dropping data silently is the one thing an adapter or a stage may never
 	// do (docs/rules.md §6.1).
 	unread []int
+
+	// notes are things the caller should know that are not failures — a part
+	// deliberately not extracted, hidden text found and kept.
+	notes []string
 }
 
 // run executes the nine stages and returns everything Extract needs to build a
@@ -142,6 +147,7 @@ func run(ctx context.Context, cfg *config, src Source, sch *schema.Schema) (*out
 		provider: rd.provider,
 		findings: findingsOf(rd.text),
 		unread:   rd.unread,
+		notes:    rd.notes,
 		second:   secondObject,
 		secondReading: func() Reading {
 			if second == nil {
@@ -163,6 +169,7 @@ type outcome struct {
 	provider string
 	findings []normalise.Finding
 	unread   []int
+	notes    []string
 
 	// second is the reply from a second, independent reading, and is nil
 	// unless ModeBoth was asked for. secondReading names which reading it was.
@@ -226,6 +233,13 @@ func stageAcquire(ctx context.Context, cfg *config, data []byte, doc Document, m
 		if !errors.Is(err, ErrNoContent) || cfg.reading == ModeText {
 			return nil, err
 		}
+	}
+
+	// DOCX, XLSX and CSV carry their own text. Like a text-layer PDF they take
+	// the exact, nearly-free path: no OCR, no renderer, no model call to
+	// acquire content.
+	if doc.Kind == KindDOCX || doc.Kind == KindXLSX || doc.Kind == KindCSV {
+		return acquireByOffice(ctx, cfg, doc, start)
 	}
 
 	switch doc.Kind {
@@ -312,6 +326,70 @@ func stageAcquire(ctx context.Context, cfg *config, data []byte, doc Document, m
 			MediaType: mediaTypeOf(doc.Kind),
 		}},
 	}, nil
+}
+
+// acquireByOffice reads a DOCX, XLSX or CSV.
+//
+// These formats have no page geometry — a DOCX has no fixed layout until it is
+// rendered, and a spreadsheet cell has a grid position rather than a point on
+// paper — so internal/office reports zero boxes and internal/normalise abstains
+// from the checks that need them rather than running them against a guess. The
+// cost is real and worth stating: a value extracted from one of these cannot
+// be highlighted on a rendered page, only located in the text.
+func acquireByOffice(ctx context.Context, cfg *config, doc Document, start time.Time) (*reading, error) {
+	lim := limitsOf(cfg)
+	d, err := office.Extract(doc.Data, detect.Kind(doc.Kind), lim,
+		detect.NewCounter(detect.LimitDecompressedBytes, lim.MaxDecompressedBytes))
+	if err != nil {
+		cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Err: err})
+		return nil, classify(OpAcquire, "", err)
+	}
+	if len(d.Pages) > cfg.maxPages {
+		return nil, &Error{Op: OpAcquire, Kind: ErrLimitExceeded,
+			Message: "page count exceeds the limit, raise with WithMaxPages"}
+	}
+
+	nStart := time.Now()
+	res := normalise.Normalise(normalise.Input{Pages: d.Pages})
+	cfg.emit(ctx, Event{Op: OpNormalise, Duration: time.Since(nStart), Bytes: int64(len(res.Text))})
+
+	if int64(len(res.Text)) > cfg.maxTextBytes {
+		return nil, &Error{Op: OpNormalise, Kind: ErrLimitExceeded,
+			Message: "extracted text exceeds the limit, raise with WithMaxTextBytes"}
+	}
+
+	kinds := make([]Reading, len(d.Pages))
+	content := make([]prompt.PageContent, 0, len(d.Pages))
+	for i := range d.Pages {
+		kinds[i] = ReadingText
+		content = append(content, prompt.PageContent{
+			Number:  i + 1,
+			Reading: prompt.Reading(ReadingText),
+			Text:    pageText(res, i),
+		})
+	}
+	cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Pages: len(d.Pages)})
+
+	rd := &reading{
+		doc:   Document{Kind: doc.Kind, Pages: len(d.Pages), Size: doc.Size, Data: doc.Data},
+		kinds: kinds,
+		text:  res,
+		pages: content,
+	}
+
+	// Parts deliberately not extracted, and hidden runs, are reported rather
+	// than silently absent (docs/rules.md §6.1). Hidden text in particular is
+	// invisible to a reviewer and visible to the model, which is the shape of
+	// an injection.
+	for _, part := range d.Skipped {
+		rd.notes = append(rd.notes, fmt.Sprintf("%s was not extracted", part))
+	}
+	if d.HiddenRuns > 0 {
+		rd.notes = append(rd.notes, fmt.Sprintf(
+			"%d run(s) are marked hidden: text a reviewer cannot see and the model can",
+			d.HiddenRuns))
+	}
+	return rd, nil
 }
 
 // acquireByTextLayer reads a PDF's own characters.

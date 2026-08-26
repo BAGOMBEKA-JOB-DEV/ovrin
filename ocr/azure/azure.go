@@ -37,6 +37,18 @@
 // Retry-After where it sends one, and from [WithPollInterval] otherwise —
 // which is the one part of polling an adapter cannot avoid choosing.
 //
+// A reply to the submission that already carries a finished analysis is used as
+// it stands rather than being thrown away in favour of a poll. Discarding a
+// result the service has already returned would be dropping data the caller has
+// already paid for (rule §6.1).
+//
+// # What a reading costs
+//
+// [ovrin.Recognition.Usage] carries one page unit per page, which is what this
+// service bills, so the sum over a document's recognitions is what the document
+// cost. Without it the OCR stage would be the one part of the pipeline whose
+// spend never reaches [ovrin.Metadata.Usage] or a metric at all.
+//
 // # What this adapter silently ignores
 //
 // Rule §6.5 asks every adapter to document that, not only what it supports.
@@ -498,9 +510,10 @@ func finished(raw json.RawMessage) (*operation, bool) {
 		return nil, false
 	}
 	switch op.Status {
-	case statusSucceeded:
-		return &op, op.AnalyzeResult != nil
-	case statusFailed:
+	case statusSucceeded, statusFailed:
+		// Terminal either way. A success with no result is reported as the
+		// unusable reply it is, rather than sent looking for a polling header
+		// that a finished operation would not have sent.
 		return &op, true
 	default:
 		return nil, false

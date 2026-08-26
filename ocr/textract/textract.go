@@ -45,7 +45,8 @@
 //     document's bytes could travel in.
 //
 // So a document of more than one page needs [WithDocumentLocation], naming the
-// S3 object the caller has already put it in. Uploading it here instead would
+// S3 object the caller has already put it in, and a Provider configured with
+// one uses it for every document rather than choosing per call. Uploading it here instead would
 // mean this package choosing a bucket, a key, an encryption mode and a
 // lifecycle on the caller's behalf, which is deciding rather than mapping
 // (rule §6.2) — and it would put a copy of every document somewhere the caller
@@ -57,6 +58,13 @@
 // because a timeout is a policy and policy belongs to the core (rule §6.2).
 // [WithPollInterval] sets how often it asks, which is the one part of polling
 // an adapter cannot avoid choosing.
+//
+// # What a reading costs
+//
+// [ovrin.Recognition.Usage] carries one page unit per page, which is what
+// Textract bills, so the sum over a document's recognitions is what the
+// document cost. Without it the OCR stage would be the one part of the pipeline
+// whose spend never reaches [ovrin.Metadata.Usage] or a metric at all.
 //
 // # What this adapter silently ignores
 //
@@ -407,11 +415,13 @@ func (p *Provider) Recognise(ctx context.Context, page ovrin.Page) (*ovrin.Recog
 //
 // This is the route that lets a scanned PDF be extracted with no local renderer
 // at all, which is what [ADR-0010] defers rasterising on. Which of Textract's
-// two operations serves it depends on what the caller supplied: a single page
-// can be sent inline, and anything longer is read from the Amazon S3 object
-// [WithDocumentLocation] names, because Textract's asynchronous operation
-// accepts nothing else. Both need [WithPageSize], because Textract's geometry
-// is a fraction of a page whose size it never states.
+// two operations serves it depends on what the caller supplied: where
+// [WithDocumentLocation] names an Amazon S3 object, the asynchronous operation
+// reads the document from there, and otherwise the document's own bytes are
+// sent inline — which reads a single page and refuses anything longer, because
+// the asynchronous operation accepts nothing but S3. Both need [WithPageSize],
+// because Textract's geometry is a fraction of a page whose size it never
+// states.
 //
 // [ADR-0010]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/blob/main/docs/adr/0010-no-cgo-in-core.md
 func (p *Provider) RecogniseDocument(ctx context.Context, doc ovrin.Document) ([]*ovrin.Recognition, error) {
