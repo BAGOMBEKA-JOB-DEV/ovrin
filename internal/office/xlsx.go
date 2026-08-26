@@ -635,6 +635,9 @@ func (w *xlsxWalker) chardata(d *xml.Decoder) error {
 			}
 		case xml.StartElement:
 			depth++
+			if depth > w.maxDepth {
+				return &detect.LimitError{Limit: detect.LimitDepth, Max: int64(w.maxDepth)}
+			}
 		case xml.EndElement:
 			depth--
 		}

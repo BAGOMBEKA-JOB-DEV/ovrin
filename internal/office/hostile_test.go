@@ -178,29 +178,50 @@ func TestManyEntriesRefused(t *testing.T) {
 	}
 }
 
+// TestDeeplyNestedXMLIsBounded checks that the nesting ceiling is a property
+// of the document rather than of which elements this package is interested in.
+//
+// Every route through the reader is covered, because a ceiling that applies
+// only to the paths that recurse is a ceiling an attacker routes around by
+// nesting the payload somewhere that gets skipped instead.
 func TestDeeplyNestedXMLIsBounded(t *testing.T) {
 	t.Parallel()
+	deep := func(tag string, n int) string {
+		return strings.Repeat("<"+tag+">", n) + strings.Repeat("</"+tag+">", n)
+	}
 	tests := []struct {
 		name    string
 		body    string
 		wantErr bool
 	}{
 		{
-			name:    "nesting the walker descends through spends the depth budget",
-			body:    strings.Repeat(`<w:p>`, 5000) + strings.Repeat(`</w:p>`, 5000),
+			name:    "nesting the walker descends through",
+			body:    deep("w:p", 5000),
 			wantErr: true,
 		},
 		{
-			name: "nesting inside a skipped subtree is stepped over without recursion",
-			// skipElement is iterative on purpose: encoding/xml's own
-			// Decoder.Skip recurses once per level and would exhaust the
-			// stack here.
-			body:    `<w:del>` + strings.Repeat(`<w:x>`, 50000) + strings.Repeat(`</w:x>`, 50000) + `</w:del>`,
-			wantErr: false,
+			name:    "nesting inside a subtree that is skipped",
+			body:    `<w:del>` + deep("w:x", 50000) + `</w:del>`,
+			wantErr: true,
 		},
 		{
-			name:    "nesting inside run properties is counted rather than recursed",
-			body:    `<w:p><w:r><w:rPr>` + strings.Repeat(`<w:x>`, 50000) + strings.Repeat(`</w:x>`, 50000) + `</w:rPr><w:t>ok</w:t></w:r></w:p>`,
+			name:    "nesting inside run properties",
+			body:    `<w:p><w:r><w:rPr>` + deep("w:x", 50000) + `</w:rPr><w:t>ok</w:t></w:r></w:p>`,
+			wantErr: true,
+		},
+		{
+			name:    "nesting inside a text element",
+			body:    `<w:p><w:r><w:t>` + deep("w:x", 50000) + `</w:t></w:r></w:p>`,
+			wantErr: true,
+		},
+		{
+			name:    "nesting inside an alternate content branch",
+			body:    `<w:p><mc:AlternateContent><mc:Choice>` + deep("w:x", 50000) + `</mc:Choice></mc:AlternateContent></w:p>`,
+			wantErr: true,
+		},
+		{
+			name:    "nesting within the budget is read normally",
+			body:    `<w:p>` + strings.Repeat(`<w:smartTag>`, 8) + `<w:r><w:t>deep</w:t></w:r>` + strings.Repeat(`</w:smartTag>`, 8) + `</w:p>`,
 			wantErr: false,
 		},
 	}
@@ -208,20 +229,42 @@ func TestDeeplyNestedXMLIsBounded(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			lim := tightLimits()
+			lim := tightLimits() // MaxDepth is 16
 			lim.MaxStreamBytes = 4 << 20
 			lim.MaxDecompressedBytes = 4 << 20
 			_, err := ExtractDOCX(docxOf(t, tt.body), lim, nil)
 			if tt.wantErr {
+				// A depth failure, never a stack exhaustion: the whole reason
+				// the skip is iterative and the ceiling uniform is that a
+				// malformed document must not take down the calling service
+				// (docs/threat-model.md T3).
 				if !errors.Is(err, detect.ErrLimitExceeded) {
 					t.Fatalf("err = %v, want a depth limit failure", err)
 				}
+				assertNoDocumentContent(t, err)
 				return
 			}
-			if err != nil && !errors.Is(err, detect.ErrLimitExceeded) {
-				t.Fatalf("err = %v, want success or a limit failure, never a crash", err)
+			if err != nil {
+				t.Fatalf("err = %v, want nesting within the budget to be read", err)
 			}
 		})
+	}
+}
+
+// TestNestedXMLDoesNotExhaustTheStack drives nesting far past anything the
+// ceilings allow, to prove the failure is a returned error rather than a
+// crash. encoding/xml's own Decoder.Skip recurses once per level, which is why
+// this package does not use it.
+func TestNestedXMLDoesNotExhaustTheStack(t *testing.T) {
+	t.Parallel()
+	body := `<w:del>` + strings.Repeat(`<w:x>`, 400000) + strings.Repeat(`</w:x>`, 400000) + `</w:del>`
+	lim := tightLimits()
+	lim.MaxStreamBytes = 8 << 20
+	lim.MaxDecompressedBytes = 8 << 20
+	lim.MaxDepth = 1 << 20 // deliberately above the nesting, so the ceiling is not what saves us
+	_, err := ExtractDOCX(docxOf(t, body), lim, nil)
+	if err != nil && !errors.Is(err, detect.ErrLimitExceeded) && !errors.Is(err, ErrMalformed) {
+		t.Fatalf("err = %v, want a returned error rather than a crash", err)
 	}
 }
 

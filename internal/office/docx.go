@@ -322,6 +322,9 @@ func (w *docxWalker) runProps(d *xml.Decoder) (bool, error) {
 		switch t := t.(type) {
 		case xml.StartElement:
 			depth++
+			if depth > w.maxDepth {
+				return false, &detect.LimitError{Limit: detect.LimitDepth, Max: int64(w.maxDepth)}
+			}
 			// w:vanish and w:webHidden are the two ways a run is marked
 			// invisible. Both carry an optional w:val that turns the property
 			// off again, which is how a style's hidden flag is cancelled on
@@ -414,6 +417,9 @@ func (w *docxWalker) chardata(d *xml.Decoder) error {
 			}
 		case xml.StartElement:
 			depth++
+			if depth > w.maxDepth {
+				return &detect.LimitError{Limit: detect.LimitDepth, Max: int64(w.maxDepth)}
+			}
 		case xml.EndElement:
 			depth--
 		}
