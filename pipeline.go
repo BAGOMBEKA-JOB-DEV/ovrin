@@ -1,10 +1,13 @@
 package ovrin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"time"
 
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/detect"
@@ -34,6 +37,12 @@ type reading struct {
 	text     *normalise.Result    // nil on a vision-only reading
 	kinds    []Reading            // which reading served each page
 	provider string               // the OCR provider, if one served
+
+	// unread are pages no reading could serve. They are reported rather than
+	// left silently blank: a page ovrin could not read is data it dropped, and
+	// dropping data silently is the one thing an adapter or a stage may never
+	// do (docs/rules.md §6.1).
+	unread []int
 }
 
 // run executes the nine stages and returns everything Extract needs to build a
@@ -98,6 +107,7 @@ func run(ctx context.Context, cfg *config, src Source, sch *schema.Schema) (*out
 		reading:  primaryReading(rd.kinds),
 		provider: rd.provider,
 		findings: findingsOf(rd.text),
+		unread:   rd.unread,
 		meta:     meta,
 	}, nil
 }
@@ -111,6 +121,7 @@ type outcome struct {
 	reading  Reading
 	provider string
 	findings []normalise.Finding
+	unread   []int
 	meta     Metadata
 }
 
@@ -286,6 +297,7 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 	}
 
 	pages := make([]normalise.Page, 0, n)
+	var unusable []int
 	usable := 0
 	for i := 1; i <= n; i++ {
 		if err := ctx.Err(); err != nil {
@@ -300,9 +312,14 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 		// right shape and the wrong letters, and passing that on would poison
 		// every stage after it (ADR-0011).
 		if !page.Usable(th) {
+			// Contributing an empty page here made a scanned appendix bound
+			// onto a digital contract silently blank: the model never saw it
+			// and nothing said so. The page is recorded as needing another
+			// reading instead (docs/pipeline.md stage 2).
 			pages = append(pages, normalise.Page{
 				Number: i, Width: page.Content.Width, Height: page.Content.Height,
 			})
+			unusable = append(unusable, i)
 			continue
 		}
 		usable++
@@ -323,12 +340,39 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 			Message: "extracted text exceeds the limit, raise with WithMaxTextBytes"}
 	}
 
+	// A page the text layer could not serve is read another way, if there is
+	// another way. Acquisition is per page, not per document: one file can
+	// carry a digital contract and a scanned appendix, and taking one path for
+	// the whole of it loses whichever half it did not choose.
+	byPage := map[int]prompt.PageContent{}
+	var unread []int
+	for _, n := range unusable {
+		c, rd, err := acquirePage(ctx, cfg, doc, n)
+		if err != nil {
+			// The rest of the document is readable, so a page that cannot be
+			// filled is reported and the extraction continues. Refusing the
+			// whole document because one appendix page needs a renderer
+			// nobody configured would discard everything that did work.
+			cfg.emit(ctx, Event{Op: OpAcquire, Page: n, Duration: time.Since(start), Err: err})
+			unread = append(unread, n)
+			continue
+		}
+		byPage[n] = c
+		_ = rd
+	}
+
 	kinds := make([]Reading, len(pages))
 	content := make([]prompt.PageContent, 0, len(pages))
 	for i := range pages {
+		n := i + 1
+		if c, ok := byPage[n]; ok {
+			kinds[i] = Reading(c.Reading)
+			content = append(content, c)
+			continue
+		}
 		kinds[i] = ReadingText
 		content = append(content, prompt.PageContent{
-			Number:  i + 1,
+			Number:  n,
 			Reading: prompt.Reading(ReadingText),
 			Text:    pageText(res, i),
 		})
@@ -336,11 +380,105 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 	cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Pages: len(pages)})
 
 	return &reading{
-		doc:   Document{Kind: doc.Kind, Pages: len(pages), Size: doc.Size, Data: doc.Data},
-		kinds: kinds,
-		text:  res,
-		pages: content,
+		doc:    Document{Kind: doc.Kind, Pages: len(pages), Size: doc.Size, Data: doc.Data},
+		kinds:  kinds,
+		text:   res,
+		pages:  content,
+		unread: unread,
 	}, nil
+}
+
+// acquirePage reads one page of a document the text layer could not serve.
+//
+// It is the per-page half of stage 2: rasterise, then OCR, then vision, taking
+// the first that can serve this page. The order is the same as for a whole
+// document and for the same reason — OCR yields text, and text is what
+// grounding needs, so a value read this way can still be checked against the
+// document it came from.
+func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prompt.PageContent, Reading, error) {
+	if cfg.renderer == nil {
+		return prompt.PageContent{}, ReadingUnknown, &Error{
+			Op:   OpAcquire,
+			Page: page,
+			Kind: ErrNoProvider,
+			Message: "this page has no usable text layer, and reading it needs a " +
+				"renderer to rasterise it — configure one with WithRenderer",
+		}
+	}
+
+	start := time.Now()
+	img, err := cfg.renderer.Render(ctx, doc, page, renderDPI)
+	cfg.emit(ctx, Event{Op: OpRender, Page: page, Duration: time.Since(start), Err: err})
+	if err != nil {
+		return prompt.PageContent{}, ReadingUnknown, classify(OpRender, "", err)
+	}
+
+	b := img.Bounds()
+	p := Page{
+		Number: page,
+		Image:  img,
+		Width:  float64(b.Dx()) * pointsPerInch / renderDPI,
+		Height: float64(b.Dy()) * pointsPerInch / renderDPI,
+		DPI:    renderDPI,
+	}
+
+	if cfg.ocr != nil {
+		oStart := time.Now()
+		rec, err := cfg.ocr.Recognise(ctx, p)
+		name := cfg.ocr.Name()
+		cfg.emit(ctx, Event{Op: OpOCR, Provider: name, Page: page, Duration: time.Since(oStart), Err: err})
+		if err != nil {
+			return prompt.PageContent{}, ReadingUnknown, classify(OpOCR, name, err)
+		}
+		res := normalise.Normalise(normalise.Input{
+			Pages: []normalise.Page{normalisePage(page, p.Width, p.Height, rec)},
+		})
+		return prompt.PageContent{
+			Number:  page,
+			Reading: prompt.Reading(ReadingOCR),
+			Text:    res.Text,
+		}, ReadingOCR, nil
+	}
+
+	// No OCR provider: the page image goes to the model. That reading produces
+	// no source text, so nothing read from it can be grounded — which is why
+	// it is the last choice rather than the first.
+	png, err := encodePNG(img)
+	if err != nil {
+		return prompt.PageContent{}, ReadingUnknown, &Error{
+			Op: OpAcquire, Page: page, Kind: ErrInternal,
+			Message: "the rendered page could not be encoded",
+		}
+	}
+	return prompt.PageContent{
+		Number:    page,
+		Reading:   prompt.Reading(ReadingVision),
+		Image:     png,
+		MediaType: "image/png",
+	}, ReadingVision, nil
+}
+
+// renderDPI is the resolution pages are rasterised at when the text layer
+// cannot serve them.
+//
+// 300 is what scanners produce and what OCR engines are tuned for. Lower loses
+// small print; higher costs memory and time for accuracy no engine uses.
+const renderDPI = 300
+
+// pointsPerInch is fixed by the typographic point, which is what page geometry
+// is expressed in throughout ovrin.
+const pointsPerInch = 72.0
+
+// encodePNG turns a rendered page into bytes an adapter can send.
+//
+// PNG rather than JPEG: a rasterised page is line art, where JPEG's artefacts
+// land exactly on the strokes an OCR engine reads.
+func encodePNG(m image.Image) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, m); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // acquireByDocumentOCR hands the whole document to a provider that rasterises

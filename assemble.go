@@ -1,6 +1,7 @@
 package ovrin
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -36,6 +37,19 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 	}
 	a.walk(sch.Fields, out.object, dst, "")
 	a.crossField()
+
+	// A page nothing could read is reported on the result, not only through a
+	// hook a caller may not be watching. Its fields are simply absent, and
+	// absent for a reason the caller is entitled to know (docs/rules.md §6.1).
+	//
+	// Collected before the Result is built: assigning Reasons first and
+	// appending afterwards copies the slice header, and the appends then land
+	// somewhere nobody reads.
+	for _, n := range out.unread {
+		a.reasons = append(a.reasons, ReviewReason{
+			Why: fmt.Sprintf("page %d could not be read by any configured reading", n),
+		})
+	}
 
 	res := &Result[T]{
 		Data:     data,

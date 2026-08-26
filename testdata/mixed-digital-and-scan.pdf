@@ -1,0 +1,59 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1043 >>
+stream
+1 1 1 rg 0 0 612 792 re f
+BT /F1 11 Tf 0 0 0 rg 72 740 Td (KAMPALA SUPPLIES LTD) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 726 Td (INVOICE INV-2026-0417) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 712 Td (Date: 14 March 2026) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 698 Td () Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 684 Td (Description               Qty      Unit      Amount) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 670 Td (A4 Paper 80gsm             40    12,500     500,000) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 656 Td (Toner Cartridge             4   185,000     740,000) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 642 Td () Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 628 Td (Subtotal                            UGX 1,240,000) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 614 Td (VAT at 18 percent                   UGX   223,200) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 600 Td (Total                               UGX 1,463,200) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 586 Td () Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 572 Td (Appendix follows on page two.) Tj ET
+BT /F1 11 Tf 0 0 0 rg 72 558 Td (Please quote the invoice number on all correspondence.) Tj ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 35 >>
+stream
+0.85 0.85 0.85 rg 0 0 612 792 re f
+
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000001342 00000 n 
+0000001412 00000 n 
+0000001516 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1601
+%%EOF

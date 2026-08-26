@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
 	"math"
 	"os"
 	"strings"
@@ -536,5 +537,66 @@ func TestHiddenTextInAPDFIsReported(t *testing.T) {
 	// the operator never learns they are under attack (ADR-0017).
 	if res.Fields["total"].Value == nil {
 		t.Error("extraction was abandoned; suspicious content is reported, not refused")
+	}
+}
+
+// stubRenderer stands in for render/pdfium, which is a separate module the core
+// cannot import. It renders a blank page of the right size; the OCR fake below
+// supplies the words.
+type stubRenderer struct{ calls *[]int }
+
+func (r stubRenderer) Render(_ context.Context, _ ovrin.Document, page, dpi int) (image.Image, error) {
+	*r.calls = append(*r.calls, page)
+	return image.NewRGBA(image.Rect(0, 0, 8*dpi, 11*dpi)), nil
+}
+
+// One file can carry a digital contract and a scanned appendix. Acquisition is
+// per page for exactly that reason: taking one path for the whole document
+// loses whichever half it did not choose, and before v0.3 the scanned half came
+// back silently blank (docs/pipeline.md stage 2).
+func TestMixedDocumentReadsEachPageItsOwnWay(t *testing.T) {
+	t.Parallel()
+
+	const fixture = "testdata/mixed-digital-and-scan.pdf"
+	if _, err := os.Stat(fixture); err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+
+	type Doc struct {
+		Total float64 `ovrin:"total amount,required,min=0"`
+	}
+
+	var rendered []int
+	var seen []ovrin.Content
+	c := ovrin.New(
+		ovrin.WithModel(captureModel{reply: map[string]any{"total": 1463200.0}, seen: &seen}),
+		ovrin.WithRenderer(stubRenderer{calls: &rendered}),
+		ovrin.WithOCR(wordOCR{words: []string{"APPENDIX", "A", "Terms", "and", "Conditions"}}),
+	)
+
+	res, err := ovrin.Extract[Doc](context.Background(), c, ovrin.File(fixture))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	// Only the page the text layer could not serve is rasterised. Rendering
+	// the digital page too would be slower and worse.
+	if len(rendered) != 1 || rendered[0] != 2 {
+		t.Errorf("rendered pages = %v, want only page 2", rendered)
+	}
+
+	if got := res.Metadata.Readings; len(got) != 2 ||
+		got[0] != ovrin.ReadingText || got[1] != ovrin.ReadingOCR {
+		t.Errorf("Readings = %v, want [text ocr]", got)
+	}
+
+	if len(seen) != 2 {
+		t.Fatalf("the model saw %d pages, want 2", len(seen))
+	}
+	if seen[1].Text == "" {
+		t.Error("page 2 reached the model empty; the scanned half was lost")
+	}
+	if !contains(seen[1].Text, "APPENDIX") {
+		t.Errorf("page 2 does not carry what OCR read: %q", seen[1].Text)
 	}
 }
