@@ -136,7 +136,7 @@ func (m *chatModel) Generate(ctx context.Context, req ovrin.ModelRequest) (*ovri
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // nothing to do on a failed close of a response we have read
 
 	var out struct {
 		Choices []struct {

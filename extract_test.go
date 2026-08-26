@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"os"
 	"strings"
 	"testing"
 
@@ -423,4 +424,70 @@ func TestDocumentOCRIsPreferredAndReceivesTheBytes(t *testing.T) {
 	if !hasSignal(f.Signals, ovrin.SignalGrounding) {
 		t.Errorf("no grounding signal although an OCR reading produced source text; signals: %v", names(f.Signals))
 	}
+}
+
+// A PDF that carries its own characters is read directly — no OCR provider, no
+// renderer, no model call to acquire content. It is exact and nearly free, and
+// it is the path most real PDFs take (ADR-0012).
+//
+// The fixture is a corpus document. It was produced by eval/corpusgen rather
+// than by internal/pdf, so this is not the parser reading its own writing —
+// though rules §3.5 is right that documents from Word, LaTeX and real scanners
+// are what will actually settle whether the parser works.
+func TestTextLayerPDFNeedsNoProvider(t *testing.T) {
+	t.Parallel()
+
+	const fixture = "eval/corpus/forms/001.pdf"
+	if _, err := os.Stat(fixture); err != nil {
+		t.Skipf("corpus fixture missing: %v", err)
+	}
+
+	type Form struct {
+		Applicant string `ovrin:"applicant name"`
+	}
+
+	var seen []ovrin.Content
+	c := ovrin.New(ovrin.WithModel(captureModel{
+		reply: map[string]any{"applicant": "Nakato Zawedde"},
+		seen:  &seen,
+	}))
+
+	res, err := ovrin.Extract[Form](context.Background(), c, ovrin.File(fixture))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	if got := res.Metadata.Readings; len(got) == 0 || got[0] != ovrin.ReadingText {
+		t.Errorf("Readings = %v, want the text layer to have served", got)
+	}
+	if len(seen) == 0 {
+		t.Fatal("no content reached the model")
+	}
+	if seen[0].Text == "" {
+		t.Error("the content carried no text")
+	}
+	if len(seen[0].Image) != 0 {
+		t.Error("a page image was sent although the text layer was readable")
+	}
+
+	// Text means grounding applies, which is the reason to prefer this reading.
+	if f := res.Fields["applicant"]; !hasSignal(f.Signals, ovrin.SignalGrounding) {
+		t.Errorf("no grounding signal on a text-layer reading; signals: %v", names(f.Signals))
+	}
+}
+
+// captureModel records what it was asked, so a test can assert on the request
+// rather than only on the result.
+type captureModel struct {
+	reply map[string]any
+	seen  *[]ovrin.Content
+}
+
+func (m captureModel) Generate(_ context.Context, r ovrin.ModelRequest) (*ovrin.ModelResponse, error) {
+	*m.seen = append(*m.seen, r.Content...)
+	b, err := json.Marshal(m.reply)
+	if err != nil {
+		return nil, err
+	}
+	return &ovrin.ModelResponse{JSON: b}, nil
 }

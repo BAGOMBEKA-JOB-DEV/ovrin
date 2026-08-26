@@ -87,9 +87,14 @@ type CategoryReport struct {
 
 // DifficultyReport is one difficulty label within a category.
 type DifficultyReport struct {
-	Difficulty string  `json:"difficulty"`
-	N          int     `json:"n"`
-	Metrics    Metrics `json:"metrics"`
+	// Difficulty is the label, one of [Difficulties].
+	Difficulty string `json:"difficulty"`
+
+	// N is the number of documents carrying it.
+	N int `json:"n"`
+
+	// Metrics is the aggregate over those documents.
+	Metrics Metrics `json:"metrics"`
 }
 
 // FieldReport is one field key within a category.
@@ -97,7 +102,9 @@ type FieldReport struct {
 	// Field is the key as [ovrin.Result].Fields uses it, with slice indices
 	// collapsed: "items[0].total" and "items[3].total" are both reported as
 	// "items[].total", because per-index accuracy is noise.
-	Field   string  `json:"field"`
+	Field string `json:"field"`
+
+	// Metrics is the aggregate over every instance of that field.
 	Metrics Metrics `json:"metrics"`
 }
 

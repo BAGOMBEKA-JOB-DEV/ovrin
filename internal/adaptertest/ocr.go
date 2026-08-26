@@ -249,7 +249,7 @@ func (s OCRSuite) ocrDocument() ovrin.Document {
 		Kind:  ovrin.KindPDF,
 		Pages: len(s.WantDocument),
 		Size:  int64(len(DocumentCanary)),
-		Data:  []byte(DocumentCanary),
+		Data:  DocumentCanary,
 	}
 }
 

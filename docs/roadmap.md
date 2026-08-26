@@ -34,7 +34,7 @@ OCR providers that accept a PDF directly.
 
 **Core**
 - [x] Format detection by content ([`pipeline.md`](pipeline.md) stage 1)
-- [ ] PDF text-layer extraction with positions, in-tree
+- [x] PDF text-layer extraction with positions, in-tree
       ([ADR-0011](adr/0011-pdf-text-extraction.md)) — the largest single piece
       of work here by a wide margin
 - [x] Resource limits, enforced before allocation
@@ -50,7 +50,7 @@ OCR providers that accept a PDF directly.
 - [x] Validation: `required`, type checking, `min`, `max`, `format`, `enum`
       ([ADR-0006](adr/0006-tag-grammar.md), [ADR-0029](adr/0029-v01-scope-corrected.md))
 - [x] Nested structs and slices, to full depth
-- [ ] Cross-field validation rules, and the `cross_field` signal — `internal/validate` has them; **the pipeline does not call them yet**, so the signal never fires
+- [x] Cross-field validation rules, and the `cross_field` signal
 - [x] `Explain` and its `String()` rendering
       ([ADR-0016](adr/0016-explain-returns-data.md))
 - [x] Grounding, and the `grounding` signal
@@ -62,12 +62,12 @@ OCR providers that accept a PDF directly.
 
 **Modules**
 - [x] `model/skyl`
-- [ ] `ocr/google`
+- [x] `ocr/google`
 
 **Quality**
 - [x] The offline sandbox ([ADR-0022](adr/0022-offline-testing.md))
 - [x] The shared adapter contract suite
-- [ ] Evaluation harness, running against the seeded corpus
+- [x] Evaluation harness, running against the seeded corpus
 
 **Explicitly not in v0.1**, and version-marked wherever the guides show them
 ([ADR-0029](adr/0029-v01-scope-corrected.md)): two readings and

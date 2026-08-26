@@ -129,8 +129,8 @@ func TestParseMeta(t *testing.T) {
 			},
 		},
 		{
-			name: "a misspelled key is refused rather than ignored",
-			in:   "dificulty: poor-scan\n",
+			name: "an unknown key is refused rather than ignored",
+			in:   "hardness: poor-scan\n",
 			err:  true,
 		},
 		{

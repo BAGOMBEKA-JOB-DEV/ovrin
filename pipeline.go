@@ -11,6 +11,7 @@ import (
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/img"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/jsonschema"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/normalise"
+	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/pdf"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/prompt"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
 )
@@ -151,14 +152,51 @@ func stageDetect(ctx context.Context, cfg *config, src Source, meta *Metadata) (
 func stageAcquire(ctx context.Context, cfg *config, data []byte, doc Document, meta *Metadata) (*reading, error) {
 	start := time.Now()
 
+	// A PDF that carries its own characters is read directly. It is exact and
+	// nearly free, and rendering those characters to pixels for a model to
+	// read back would be a lossy round trip through the one reading that
+	// cannot be wrong (ADR-0012).
+	if doc.Kind == KindPDF && cfg.reading != ModeOCR && cfg.reading != ModeVision {
+		rd, err := acquireByTextLayer(ctx, cfg, doc, meta, start)
+		if err == nil {
+			return rd, nil
+		}
+		// No usable text layer is not a failure: it is the ordinary state of a
+		// scan, and the whole point of the staged design is that the next
+		// reading takes over. Anything else — encryption, a filter we do not
+		// implement, a limit — is real and stops here.
+		if !errors.Is(err, ErrNoContent) || cfg.reading == ModeText {
+			return nil, err
+		}
+	}
+
 	switch doc.Kind {
 	case KindPNG, KindJPEG, KindTIFF, KindWebP:
+	case KindPDF:
+		// The text layer was unusable and we are past it. A scanned PDF needs
+		// either a provider that takes the whole document or a renderer to
+		// turn its pages into images, and this build has no renderer.
+		if _, ok := cfg.ocr.(DocumentOCR); !ok {
+			return nil, &Error{
+				Op:   OpAcquire,
+				Kind: ErrNoProvider,
+				Message: "this PDF has no usable text layer, and reading it needs " +
+					"either an OCR provider that accepts a document whole (WithOCR) " +
+					"or a renderer to rasterise its pages, which this build does not " +
+					"yet ship",
+			}
+		}
+		return nil, &Error{
+			Op:      OpAcquire,
+			Kind:    ErrNoContent,
+			Message: "the document-level provider did not read this PDF",
+		}
 	default:
 		return nil, &Error{
 			Op:   OpAcquire,
 			Kind: ErrNoProvider,
-			Message: fmt.Sprintf("%s is not readable yet: this build handles images "+
-				"(PNG, JPEG) through OCR or a vision-capable model", doc.Kind),
+			Message: fmt.Sprintf("%s is not readable yet: this build handles PDFs with "+
+				"a text layer, and images (PNG, JPEG) through OCR or a vision-capable model", doc.Kind),
 		}
 	}
 
@@ -215,6 +253,93 @@ func stageAcquire(ctx context.Context, cfg *config, data []byte, doc Document, m
 			Image:     data,
 			MediaType: mediaTypeOf(doc.Kind),
 		}},
+	}, nil
+}
+
+// acquireByTextLayer reads a PDF's own characters.
+//
+// It returns an error wrapping ErrNoContent when the text layer is missing or
+// unusable, which the caller treats as "try the next reading" rather than as a
+// failure. Every other error is real: an encrypted document, a filter we do not
+// implement, a limit reached.
+func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Metadata, start time.Time) (*reading, error) {
+	lim := limitsOf(cfg)
+	d, err := pdf.Open(doc.Data, lim, detect.NewCounter(detect.LimitDecompressedBytes, lim.MaxDecompressedBytes))
+	if err != nil {
+		cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Err: err})
+		return nil, classify(OpAcquire, "", err)
+	}
+
+	n := d.NumPages()
+	if n == 0 {
+		return nil, &Error{Op: OpAcquire, Kind: ErrNoContent, Message: "the document has no pages"}
+	}
+	if n > cfg.maxPages {
+		return nil, &Error{Op: OpAcquire, Kind: ErrLimitExceeded,
+			Message: "page count exceeds the limit, raise with WithMaxPages"}
+	}
+
+	th := pdf.Thresholds{
+		MinTextDensity:      cfg.minTextDensity,
+		MaxReplacementRatio: cfg.maxReplacementRatio,
+		MinDecodableRatio:   cfg.minDecodableRatio,
+	}
+
+	pages := make([]normalise.Page, 0, n)
+	usable := 0
+	for i := 1; i <= n; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, classify(OpAcquire, "", err)
+		}
+		page, err := d.Page(i)
+		if err != nil {
+			return nil, classify(OpAcquire, "", err)
+		}
+		// A page that fails the heuristic contributes no words rather than
+		// plausible rubbish. A broken ToUnicode table produces text of the
+		// right shape and the wrong letters, and passing that on would poison
+		// every stage after it (ADR-0011).
+		if !page.Usable(th) {
+			pages = append(pages, normalise.Page{
+				Number: i, Width: page.Content.Width, Height: page.Content.Height,
+			})
+			continue
+		}
+		usable++
+		pages = append(pages, page.Content)
+	}
+
+	if usable == 0 {
+		return nil, &Error{Op: OpAcquire, Kind: ErrNoContent,
+			Message: "no page has a usable text layer"}
+	}
+
+	nStart := time.Now()
+	res := normalise.Normalise(normalise.Input{Pages: pages, Metadata: d.Metadata()})
+	cfg.emit(ctx, Event{Op: OpNormalise, Duration: time.Since(nStart), Bytes: int64(len(res.Text))})
+
+	if int64(len(res.Text)) > cfg.maxTextBytes {
+		return nil, &Error{Op: OpNormalise, Kind: ErrLimitExceeded,
+			Message: "extracted text exceeds the limit, raise with WithMaxTextBytes"}
+	}
+
+	kinds := make([]Reading, len(pages))
+	content := make([]prompt.PageContent, 0, len(pages))
+	for i := range pages {
+		kinds[i] = ReadingText
+		content = append(content, prompt.PageContent{
+			Number:  i + 1,
+			Reading: prompt.Reading(ReadingText),
+			Text:    pageText(res, i),
+		})
+	}
+	cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Pages: len(pages)})
+
+	return &reading{
+		doc:   Document{Kind: doc.Kind, Pages: len(pages), Size: doc.Size, Data: doc.Data},
+		kinds: kinds,
+		text:  res,
+		pages: content,
 	}, nil
 }
 

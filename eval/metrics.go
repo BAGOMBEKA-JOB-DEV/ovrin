@@ -56,7 +56,10 @@ type Observation struct {
 
 // Case pairs one corpus document with what an extraction made of it.
 type Case struct {
-	Document    Document
+	// Document is the corpus entry, with its ground truth and metadata.
+	Document Document
+
+	// Observation is what the extraction reported for it.
 	Observation Observation
 }
 
@@ -390,7 +393,7 @@ func calibrationOf(js []judgement) Calibration {
 		if o.excluded {
 			continue
 		}
-		if o.flagged && !(o.produced && o.correct) {
+		if o.flagged && (!o.produced || !o.correct) {
 			wrongFlagged++
 		}
 	}
