@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -332,9 +333,9 @@ func TestProviderContract(t *testing.T) {
 // What only this adapter's own test can check
 // ---------------------------------------------------------------------------
 
-// serve starts a test server whose reply is computed from the request, and
-// returns a provider pointed at it along with what it received.
-func serve(t *testing.T, answer func(target string, body []byte) (int, string)) (*Provider, *requests) {
+// serveURL starts a test server whose reply is computed from the request, and
+// returns its address along with what it received.
+func serveURL(t *testing.T, answer func(target string, body []byte) (int, string)) (string, *requests) {
 	t.Helper()
 
 	rec := &requests{}
@@ -352,27 +353,47 @@ func serve(t *testing.T, answer func(target string, body []byte) (int, string)) 
 	}))
 	t.Cleanup(srv.Close)
 
-	return New(testRegion, testCredentials(), WithBaseURL(srv.URL),
+	return srv.URL, rec
+}
+
+// serve is serveURL with a provider already pointed at it.
+func serve(t *testing.T, answer func(target string, body []byte) (int, string)) (*Provider, *requests) {
+	t.Helper()
+
+	url, rec := serveURL(t, answer)
+	return New(testRegion, testCredentials(), WithBaseURL(url),
 		WithPageSize(pageWidth, pageHeight), WithPollInterval(time.Millisecond)), rec
 }
 
-// requests records what a test server received. It is guarded because the
-// concurrency assertions call through it from several goroutines.
+// requests records what a test server received. It is guarded because a test
+// server serves each request on its own goroutine.
 type requests struct {
-	n       atomic.Int64
+	mu      sync.Mutex
 	targets []string
 	auths   []string
 	bodies  []string
 }
 
 func (r *requests) add(target, auth, body string) {
-	r.n.Add(1)
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.targets = append(r.targets, target)
 	r.auths = append(r.auths, auth)
 	r.bodies = append(r.bodies, body)
 }
 
-func (r *requests) count() int { return int(r.n.Load()) }
+func (r *requests) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.targets)
+}
+
+// at returns the target, credential and body of one recorded request.
+func (r *requests) at(i int) (target, auth, body string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.targets[i], r.auths[i], r.bodies[i]
+}
 
 func ok(body string) func(string, []byte) (int, string) {
 	return func(string, []byte) (int, string) { return http.StatusOK, body }
@@ -400,9 +421,6 @@ func TestPageUnitsAreReported(t *testing.T) {
 			rec.Usage)
 	}
 
-	doc, _ := serve(t, ok(jobBody(2, jobSucceeded, documentLines)))
-	docP := New(testRegion, testCredentials(), WithBaseURL(""), WithPageSize(pageWidth, pageHeight))
-	_ = docP
 	recs, err := documentProvider(t, ok(jobBody(2, jobSucceeded, documentLines))).
 		RecogniseDocument(context.Background(), pdf(2, nil))
 	if err != nil {
@@ -416,15 +434,14 @@ func TestPageUnitsAreReported(t *testing.T) {
 		t.Errorf("the document's page units total %d, want 2; the sum over a "+
 			"document's pages is what the provider bills for it", total)
 	}
-	_ = doc
 }
 
 // documentProvider returns a provider configured to read a document from S3.
 func documentProvider(t *testing.T, answer func(string, []byte) (int, string)) *Provider {
 	t.Helper()
 
-	p, _ := serve(t, answer)
-	return New(testRegion, testCredentials(), WithBaseURL(p.baseURL),
+	url, _ := serveURL(t, answer)
+	return New(testRegion, testCredentials(), WithBaseURL(url),
 		WithPageSize(pageWidth, pageHeight), WithPollInterval(time.Millisecond),
 		WithDocumentLocation(func(context.Context, ovrin.Document) (S3Object, error) {
 			return S3Object{Bucket: "ovrin-adaptertest", Name: "document.pdf"}, nil
@@ -459,11 +476,12 @@ func TestSynchronousDocument(t *testing.T) {
 	if rec.count() != 1 {
 		t.Fatalf("%d requests were sent for a single-page document, want 1", rec.count())
 	}
-	if rec.targets[0] != targetDetect {
+	target, _, body := rec.at(0)
+	if target != targetDetect {
 		t.Errorf("X-Amz-Target = %q, want %q; a document that fits the synchronous "+
-			"operation must not start a job", rec.targets[0], targetDetect)
+			"operation must not start a job", target, targetDetect)
 	}
-	if !strings.Contains(rec.bodies[0], "JVBERi0xLjcKY29udGVudA==") {
+	if !strings.Contains(body, "JVBERi0xLjcKY29udGVudA==") {
 		t.Error("the document's own bytes never reached the provider")
 	}
 }
@@ -804,8 +822,8 @@ func TestCredentials(t *testing.T) {
 	t.Run("a credentials provider is used instead of the static key", func(t *testing.T) {
 		t.Parallel()
 
-		p, rec := serve(t, ok(syncBody(pageLines)))
-		p = New(testRegion, testCredentials(), WithBaseURL(p.baseURL),
+		url, rec := serveURL(t, ok(syncBody(pageLines)))
+		p := New(testRegion, testCredentials(), WithBaseURL(url),
 			WithCredentialsProvider(func(context.Context) (Credentials, error) {
 				return Credentials{
 					AccessKeyID:     "ASIATEMPORARY",
@@ -817,10 +835,11 @@ func TestCredentials(t *testing.T) {
 		if _, err := p.Recognise(context.Background(), testPage()); err != nil {
 			t.Fatalf("Recognise() error = %v", err)
 		}
-		if !strings.Contains(rec.auths[0], "ASIATEMPORARY") {
-			t.Errorf("Authorization = %q, want the provider's own key", rec.auths[0])
+		_, auth, _ := rec.at(0)
+		if !strings.Contains(auth, "ASIATEMPORARY") {
+			t.Errorf("Authorization = %q, want the provider's own key", auth)
 		}
-		if strings.Contains(rec.auths[0], testAccessKey) {
+		if strings.Contains(auth, testAccessKey) {
 			t.Error("the static key was sent alongside the provider's; a provider given " +
 				"both must use one, so a caller can tell which identity a call was made as")
 		}
@@ -829,8 +848,8 @@ func TestCredentials(t *testing.T) {
 	t.Run("a credentials provider that fails is an authentication failure", func(t *testing.T) {
 		t.Parallel()
 
-		p, rec := serve(t, ok(syncBody(pageLines)))
-		p = New(testRegion, Credentials{}, WithBaseURL(p.baseURL),
+		url, rec := serveURL(t, ok(syncBody(pageLines)))
+		p := New(testRegion, Credentials{}, WithBaseURL(url),
 			WithCredentialsProvider(func(context.Context) (Credentials, error) {
 				return Credentials{}, errors.New("no credentials found")
 			}))
@@ -847,8 +866,8 @@ func TestCredentials(t *testing.T) {
 	t.Run("no credential at all is an authentication failure", func(t *testing.T) {
 		t.Parallel()
 
-		p, _ := serve(t, ok(syncBody(pageLines)))
-		p = New(testRegion, Credentials{}, WithBaseURL(p.baseURL))
+		url, _ := serveURL(t, ok(syncBody(pageLines)))
+		p := New(testRegion, Credentials{}, WithBaseURL(url))
 
 		_, err := p.Recognise(context.Background(), testPage())
 		if !errors.Is(err, ovrin.ErrAuth) {
@@ -859,8 +878,8 @@ func TestCredentials(t *testing.T) {
 	t.Run("no region at all is a rejected request", func(t *testing.T) {
 		t.Parallel()
 
-		p, _ := serve(t, ok(syncBody(pageLines)))
-		p = New("", testCredentials(), WithBaseURL(p.baseURL))
+		url, _ := serveURL(t, ok(syncBody(pageLines)))
+		p := New("", testCredentials(), WithBaseURL(url))
 
 		_, err := p.Recognise(context.Background(), testPage())
 		if !errors.Is(err, ovrin.ErrBadRequest) {

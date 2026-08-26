@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/compare"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/ground"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/normalise"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
@@ -22,6 +23,15 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 	var data T
 	dst := reflect.ValueOf(&data).Elem()
 
+	// The second reading's values, keyed the same way, so a field can find its
+	// counterpart. Built by walking the second reply through the same schema:
+	// the two replies answer the same questions and must be compared question
+	// by question, not position by position.
+	var alt validate.Fields
+	if out.second != nil {
+		alt = secondValues(sch, out.second, cfg)
+	}
+
 	v := validate.New(
 		validate.WithDateOrder(validate.DateOrder(cfg.dateOrder)),
 		validate.WithCrossFieldRules(internalRules(cfg.crossField)...),
@@ -33,6 +43,7 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 		v:       v,
 		fields:  make(map[string]FieldResult),
 		values:  make(validate.Fields),
+		alt:     alt,
 		suspect: pagesWithFindings(out.findings),
 	}
 	a.walk(sch.Fields, out.object, dst, "")
@@ -69,6 +80,7 @@ type assembler struct {
 	v       *validate.Validator
 	fields  map[string]FieldResult
 	values  validate.Fields // converted values, for the cross-field rules
+	alt     validate.Fields // the second reading's values, when ModeBoth ran
 	reasons []ReviewReason
 	suspect map[int]bool
 
@@ -177,6 +189,42 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 		ev.Provenance = []Provenance{provenanceOf(gr, a.out.reading, a.out.provider)}
 	}
 
+	// Two readings of one document. When they differ, at least one is wrong
+	// and we know which field — the strongest signal ovrin has, and the reason
+	// ModeBoth exists (ADR-0014).
+	var cands []Candidate
+	if a.alt != nil {
+		cmp := compare.Field(compare.KindOf(vr.Value), []compare.Candidate{
+			{Value: vr.Value, Reading: compare.Reading(a.out.reading), Confidence: 1},
+			{Value: a.alt[key], Reading: compare.Reading(a.out.secondReading)},
+		}, compare.WithDateOrder(compare.DateOrder(a.cfg.dateOrder)))
+
+		if cmp.Applicable {
+			value, note := 1.0, "the readings agree"
+			if !cmp.Agree {
+				value, note = 0.0, "the readings disagree"
+				for _, c := range cmp.Candidates {
+					cands = append(cands, Candidate{
+						Value:   c.Value,
+						Reading: Reading(c.Reading),
+						Source:  Provenance{Reading: Reading(c.Reading), Method: methodOf(Reading(c.Reading), a.out.provider)},
+					})
+				}
+				// Value holds the higher-confidence candidate, so a caller who
+				// ignores all of this still gets the better answer — which is
+				// what makes the feature cost nothing to not use. It is a
+				// ranking, not a resolution: nothing here settles which
+				// reading was right.
+				if cmp.Best.Value != nil {
+					vr.Value = cmp.Best.Value
+				}
+			}
+			ev.Candidates = cands
+			ev.Agreement = &value
+			ev.AgreementNote = note
+		}
+	}
+
 	conf, signals := a.score(f, vr, gr, ev)
 
 	fr := FieldResult{
@@ -187,6 +235,7 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 		Signals:    signals,
 		Provenance: ev.Provenance,
 		Validation: ev.Validation,
+		Candidates: cands,
 	}
 	if vr.Message != "" {
 		fr.Errors = append(fr.Errors, &Error{Op: OpValidate, Field: key, Kind: ErrSchema, Message: vr.Message})
@@ -274,6 +323,9 @@ func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result
 		add("a required field was not found in the document")
 	case gr.Applicable && gr.Grounding == ground.NotFound:
 		add(ground.ReasonNotFound)
+	}
+	if len(fr.Candidates) > 1 {
+		add("the readings disagree")
 	}
 	if vr.Ambiguity != nil {
 		add("the date is ambiguous and ovrin will not guess which reading is meant")
