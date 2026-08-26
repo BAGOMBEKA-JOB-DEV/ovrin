@@ -129,6 +129,33 @@ Full detail in [`docs/data-handling.md`](docs/data-handling.md).
 
 The core module has zero external dependencies, which is the strongest
 supply-chain control available — there is nothing to compromise. Adapter
-dependencies are quarantined per module. `govulncheck` runs per module on every
-pull request, GitHub Actions are pinned by commit SHA, and releases carry an
-SBOM and build provenance attestation.
+dependencies are quarantined per module, so importing one adapter does not hand
+you the graph of the other eight, and the permitted licence set is a written
+policy rather than a habit ([ADR-0025](docs/adr/0025-licence-policy.md)).
+Every module's third-party dependencies are attributed by name, version and
+licence in [`NOTICE`](NOTICE), including the one whose licence could not be
+established.
+
+What runs on every pull request, all of it readable in
+[`.github/workflows/`](.github/workflows):
+
+- **`govulncheck`, per module.** An advisory in one adapter's graph fails that
+  adapter, rather than being averaged away across the repository.
+- **CodeQL** over the Go source.
+- **OpenSSF Scorecard**, publishing its result as SARIF.
+- **Every GitHub Action pinned by commit SHA**, never by tag. A tag can be
+  moved under you; a digest cannot.
+- **DCO sign-off on every commit**, so each line has a named origin.
+
+And what it does not do, stated plainly because this is the section a
+procurement review reads: **ovrin publishes no SBOM and no build provenance
+attestation.** There is no release workflow to produce one. Tags are cut by
+hand from a checked tree ([`RELEASING.md`](RELEASING.md)), and what you consume
+is the module proxy's copy of a signed git tag rather than a binary this
+project built for you. What is verifiable today is that tag signature, and each
+module's `go.mod` and `go.sum`, which pin every dependency by content hash — a
+narrower guarantee than an attestation, and an honest one.
+
+Publishing an SBOM per module is an intention, not a commitment, and it will be
+described here as a fact only once it is one. Until then, a claim anywhere that
+ovrin ships an SBOM is a documentation bug; please report it as one.

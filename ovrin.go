@@ -125,6 +125,19 @@ func New(opts ...Option) *Client {
 		}
 		o.apply(&cfg)
 	}
+
+	// Clip the one slice in config so its capacity equals its length.
+	//
+	// Extract copies this config by value and then overlays per-call options.
+	// crossField is a slice, so the copy shares a backing array — and
+	// WithCrossField appends. If the Client's slice had spare capacity, two
+	// concurrent Extract calls each adding a per-call rule would write the
+	// same array slot: a data race, and each call seeing the other's rule.
+	//
+	// With capacity equal to length, any append must allocate, so every
+	// extraction gets its own array. That is what makes the promise on Client
+	// — safe for concurrent use — true rather than nearly true.
+	cfg.crossField = cfg.crossField[:len(cfg.crossField):len(cfg.crossField)]
 	return &Client{cfg: cfg}
 }
 

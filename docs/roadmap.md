@@ -2,8 +2,9 @@
 
 Ordered by what blocks adoption, not by what is interesting to build.
 
-**Nothing below is implemented.** The repository contains the design. This
-document says what gets built and in what order.
+**Everything through v0.3 is implemented.** What remains is v1.0, and v1.0 is
+gated on evidence rather than on code. This document says what was built, in
+what order, and what is still owed.
 
 ---
 
@@ -18,8 +19,15 @@ Work outside this repository that later phases depend on.
       in skyl `v0.1.0`; the claim that it was not was an error, corrected in
       [ADR-0008](adr/0008-skyl-is-an-adapter.md). `model/skyl` requires the real
       tag.
-- [ ] **Seed the evaluation corpus** with five redistributable documents per
-      category. Everything after this is unmeasurable without it
+- [ ] **Seed the evaluation corpus with real documents.** Twenty-five are
+      committed — five each for invoices, receipts, forms, statements and
+      identity, across clean-digital, good-scan, poor-scan, photograph and
+      multi-column difficulties — but every one is `source: synthetic`,
+      generated deterministically by `eval/corpusgen`. Synthetic documents
+      exercise the pipeline and catch regressions; they cannot tell us how
+      ovrin behaves on the documents people actually have, which is what
+      [ADR-0024](adr/0024-versioning-and-stability.md)'s first condition asks
+      for. Public forms and donated documents are what is still wanted
       ([ADR-0023](adr/0023-evaluation-corpus.md)).
 
 ---
@@ -122,21 +130,33 @@ cross-validation (v0.3), provider fallback chains (v0.2), local rasterising
 
 ## v1.0 — Trustworthy
 
-v1.0 is gated on evidence, not on features. All four conditions from
-[ADR-0024](adr/0024-versioning-and-stability.md) must hold.
+v1.0 is gated on evidence, not on features. The gate is the four conditions
+from [ADR-0024](adr/0024-versioning-and-stability.md), and all four must hold.
 
+**The gate**
+
+- [ ] **A corpus of real documents in every category, with committed reports
+      across at least two provider generations.** The twenty-five committed
+      documents are synthetic, so this condition is not met by them; see
+      Phase 0.
 - [ ] **Calibrated confidence** — published expected calibration error and
       accuracy within confidence bands. Until this lands, confidence is
       documented as a ranking signal and not a probability
       ([ADR-0013](adr/0013-multi-signal-confidence.md)).
-- [ ] Evaluation corpus populated across every category and difficulty level,
-      with committed reports across at least two provider generations
-- [ ] At least one production deployment that is not the maintainer's, with its
-      feedback incorporated
+- [ ] **At least one production deployment that is not the maintainer's**, with
+      its feedback incorporated.
+- [ ] **No known API change we would want to make.**
+
+**Work items wanted before v1.0**
+
+These are features, not conditions: shipping them does not open the gate, and
+the gate does not wait on them.
+
 - [ ] Batch processing, and streaming for documents that do not fit in memory
 - [ ] Circuit breaking in provider chains
-- [ ] Benchmarks published, per stage
-- [ ] No known API change we would want to make
+- [ ] Benchmarks published, per stage. Only `render/pdfium` has any today —
+      `make bench` runs them — and rasterising is the one stage whose cost was
+      already known to need watching
 
 ---
 
@@ -191,5 +211,6 @@ correctness ([ADR-0013](adr/0013-multi-signal-confidence.md)).
 
 Accuracy improvements are not scheduled here, because a schedule implies they
 can be planned. They come from the evaluation corpus telling us where we are
-wrong. Until the corpus exists, any promise about accuracy would be a guess
-dressed as a plan.
+wrong. The corpus that exists is synthetic, so it can catch a regression but
+cannot yet say how accurate ovrin is on real documents; until it can, any
+promise about accuracy would be a guess dressed as a plan.

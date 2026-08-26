@@ -313,35 +313,87 @@ ci: check test-cover cover-floor deps-check cross ## Everything CI runs
 # a check that was silently skipped. Tagging stays a thing a person does by
 # hand, having read this output.
 #
-#     make release-check VERSION=v0.2.0
+# VERSION is the tag exactly as it will be pushed. In a multi-module repository
+# that means it may carry the module's path prefix:
+#
+#     make release-check VERSION=v0.3.0              the core
+#     make release-check VERSION=model/skyl/v0.1.0   one module
+#
+# The module being released is derived from that prefix. MODULE= overrides the
+# derivation for the rare case where the tag and the directory disagree.
+#
+# The scoping is the point, not a convenience. Every non-root module has to
+# carry
+#
+#     replace github.com/BAGOMBEKA-JOB-DEV/ovrin => ../..
+#
+# until the core is tagged and the proxy has fetched it, because until then the
+# version its go.mod requires does not exist. A check that failed on *any*
+# module's replace therefore made the very first release impossible: the
+# replace cannot come out before the core tag, and the core tag could not be
+# cut while the replace was there. So the replace and placeholder checks read
+# the module under release, and the rest are reported as context rather than as
+# failures.
+#
+# The changelog is matched on the version number with the path prefix removed
+# and the leading v optional, because CHANGELOG.md follows Keep a Changelog and
+# writes `## [0.3.0] - 2026-08-26`. One changelog serves the whole repository,
+# so a module release looks for its own number in that same file.
 .PHONY: release-check
-release-check: ## Report whether this tree is fit to tag. VERSION=v0.2.0
-	@test -n "$(VERSION)" || { echo "usage: make release-check VERSION=v0.2.0"; exit 1; }
-	@fail=0; \
+release-check: ## Report whether this tree is fit to tag. VERSION=v0.3.0
+	@test -n "$(VERSION)" || { \
+		echo "usage: make release-check VERSION=v0.3.0"; \
+		echo "       make release-check VERSION=model/skyl/v0.1.0"; \
+		exit 1; }
+	@tag='$(VERSION)'; mod='$(MODULE)'; \
+	num="$${tag##*/}"; num="$${num#v}"; \
+	if [ -z "$$mod" ]; then \
+		case "$$tag" in */*) mod="$${tag%/*}";; *) mod=".";; esac; \
+	fi; \
+	mod="$${mod#./}"; mod="$${mod%/}"; [ -n "$$mod" ] || mod="."; \
+	if [ ! -f "$$mod/go.mod" ]; then \
+		echo "  FAIL  $$mod is not a module — no $$mod/go.mod"; \
+		echo; \
+		echo "not releasable. nothing was tagged and nothing was pushed."; \
+		exit 1; \
+	fi; \
+	echo "releasing $$mod as tag $$tag"; \
+	echo; \
+	fail=0; \
 	if [ -n "$$(git status --porcelain)" ]; then \
 		echo "  FAIL  the working tree is dirty"; fail=1; \
 	else echo "  ok    the working tree is clean"; fi; \
-	if git rev-parse -q --verify "refs/tags/$(VERSION)" >/dev/null; then \
-		echo "  FAIL  tag $(VERSION) already exists"; fail=1; \
-	else echo "  ok    tag $(VERSION) does not exist yet"; fi; \
-	if grep -q '^## \[\?$(VERSION)' CHANGELOG.md 2>/dev/null; then \
-		echo "  ok    CHANGELOG.md has a section for $(VERSION)"; \
-	else echo "  FAIL  CHANGELOG.md has no section for $(VERSION)"; fail=1; fi; \
+	if git rev-parse -q --verify "refs/tags/$$tag" >/dev/null; then \
+		echo "  FAIL  tag $$tag already exists"; fail=1; \
+	else echo "  ok    tag $$tag does not exist yet"; fi; \
+	re=$$(printf '%s' "$$num" | sed 's/\./\\./g'); \
+	if grep -qE "^## \[?v?$$re\]?" CHANGELOG.md 2>/dev/null; then \
+		echo "  ok    CHANGELOG.md has a section for $$num"; \
+	else \
+		echo "  FAIL  CHANGELOG.md has no '## [$$num]' section"; fail=1; \
+	fi; \
+	if grep -q '^replace ' "$$mod/go.mod"; then \
+		echo "  FAIL  $$mod/go.mod still has a replace directive"; fail=1; \
+	else echo "  ok    $$mod/go.mod has no replace directive"; fi; \
+	if grep -qE '^[[:space:]]+[^[:space:]]+ v0\.0\.0([[:space:]]|$$)' "$$mod/go.mod"; then \
+		echo "  FAIL  $$mod/go.mod pins a v0.0.0 placeholder"; fail=1; \
+	else echo "  ok    $$mod/go.mod pins no v0.0.0 placeholder"; fi; \
+	others=; \
 	for m in $(MODULES); do \
-		if grep -q '^replace ' "$$m/go.mod"; then \
-			echo "  FAIL  $$m/go.mod has a replace directive"; fail=1; \
-		fi; \
-		if grep -qE '^[[:space:]]+[^[:space:]]+ v0\.0\.0([[:space:]]|$$)' "$$m/go.mod"; then \
-			echo "  FAIL  $$m/go.mod pins a v0.0.0 placeholder"; fail=1; \
-		fi; \
+		m="$${m#./}"; \
+		[ "$$m" = "$$mod" ] && continue; \
+		if grep -q '^replace ' "$$m/go.mod"; then others="$$others $$m"; fi; \
 	done; \
-	if [ $$fail -eq 0 ]; then echo "  ok    no replace directives or placeholder versions"; fi; \
+	if [ -n "$$others" ]; then \
+		echo "  note  still carrying a replace, not released here:$$others"; \
+		echo "        expected until each is tagged in its turn — RELEASING.md"; \
+	fi; \
 	echo; \
 	if [ $$fail -ne 0 ]; then \
 		echo "not releasable. nothing was tagged and nothing was pushed."; exit 1; \
 	fi; \
 	echo "releasable. tag and push by hand:"; \
-	echo "    git tag -s $(VERSION) -m \"$(VERSION)\" && git push origin main $(VERSION)"
+	echo "    git tag -s $$tag -m \"$$tag\" && git push origin main $$tag"
 
 .PHONY: clean
 clean: ## Remove build and coverage output

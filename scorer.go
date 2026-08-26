@@ -82,7 +82,12 @@ func (defaultScorer) Score(f FieldEvidence) (float64, []Signal) {
 	add(SignalSchema, schemaValue, WeightSchema, schemaNote(f.Validation))
 
 	if v, ok := formatSignal(f.Validation); ok {
-		add(SignalFormat, v, WeightFormat, "the declared format parsed")
+		note := "the declared format parsed"
+		if f.Ambiguous {
+			// Not a failure. The value parsed; it parsed two ways.
+			v, note = validate.AmbiguousFormatSignal, "the declared format parsed, but ambiguously"
+		}
+		add(SignalFormat, v, WeightFormat, note)
 	}
 	if f.Agreement != nil {
 		note := f.AgreementNote
@@ -220,9 +225,12 @@ func (a *assembler) score(f schema.Field, vr validate.Result, gr ground.Result, 
 	if gr.Applicable {
 		ev.Grounding = gr.Grounding
 	}
-	if v, ok := validate.FormatSignal(vr); ok {
-		_ = v // carried through Validation; kept explicit so the source is visible
-	}
+	// An ambiguous date parsed, but under more than one reading. The scorer
+	// cannot see that from []RuleResult alone — the rule passed — so it is
+	// carried explicitly. Before this the ambiguity branch of
+	// validate.FormatSignal was computed and discarded, and docs/schema.md's
+	// promise that the signal "does not drop to zero" was not kept.
+	ev.Ambiguous = vr.Ambiguity != nil
 	s := a.cfg.scorer
 	if s == nil {
 		s = defaultScorer{}

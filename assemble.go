@@ -88,9 +88,18 @@ type assembler struct {
 	reasons []ReviewReason
 	suspect map[int]bool
 
-	valid    bool
-	required []float64 // confidences of required fields
-	optional []float64
+	valid bool
+	// Keys, not confidences.
+	//
+	// These used to hold the confidence of each field as walk computed it,
+	// and aggregate averaged those numbers. But crossField runs afterwards and
+	// rescores fields in a.fields, so the averaged snapshot was taken before
+	// the last thing that changes a score. Result.Confidence and the
+	// per-field Confidence values then disagreed whenever a cross-field rule
+	// applied. Holding keys and reading a.fields at the end means there is one
+	// source of truth and no ordering to get wrong.
+	required []string // keys of required fields
+	optional []string
 }
 
 // walk processes one level of the schema against one level of the reply.
@@ -256,9 +265,9 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 	}
 	a.recordReasons(f, key, vr, gr, conf, cands)
 	if required(f) {
-		a.required = append(a.required, conf)
+		a.required = append(a.required, key)
 	} else {
-		a.optional = append(a.optional, conf)
+		a.optional = append(a.optional, key)
 	}
 }
 
@@ -347,12 +356,12 @@ func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result
 func (a *assembler) aggregate() float64 {
 	const optionalWeight = 0.5
 	var sum, weight float64
-	for _, c := range a.required {
-		sum += c
+	for _, k := range a.required {
+		sum += a.fields[k].Confidence
 		weight++
 	}
-	for _, c := range a.optional {
-		sum += c * optionalWeight
+	for _, k := range a.optional {
+		sum += a.fields[k].Confidence * optionalWeight
 		weight += optionalWeight
 	}
 	if weight == 0 {

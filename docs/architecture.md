@@ -16,15 +16,20 @@ pieces fit and, more importantly, which way the dependency arrows point.
 ```text
 ovrin/                        module github.com/BAGOMBEKA-JOB-DEV/ovrin
 │                             zero external dependencies, no cgo
+├── doc.go                    the package overview
 ├── ovrin.go                  Client, Option, New, Extract[T]
 ├── result.go                 Result[T], FieldResult, Candidate, Explanation
 ├── source.go                 Source, Document, Kind, format detection
-├── schema.go                 struct-tag reflection into an internal Schema
 ├── model.go                  the Model seam            ── ADR-0007
 ├── ocr.go                    the OCR seam              ── ADR-0009
 ├── render.go                 the Renderer seam         ── ADR-0010
 ├── chain.go                  OCRChain, ModelChain      ── ADR-0018
+├── layout.go                 Layout, Table, KeyValue across the OCR seam
+├── pipeline.go               stage orchestration       ── ADR-0002
+├── assemble.go               the schema walk: validate, ground, score, write
+├── scorer.go                 the default Scorer and its weights
 ├── confidence.go             Signal, Scorer            ── ADR-0013
+├── crossfield.go             CrossFieldRule            ── ADR-0014
 ├── provenance.go             Provenance, Rect, Span    ── ADR-0015
 ├── limits.go                 the limit options         ── ADR-0020
 ├── hook.go                   Hook, Event               ── ADR-0021
@@ -32,17 +37,21 @@ ovrin/                        module github.com/BAGOMBEKA-JOB-DEV/ovrin
 ├── example_test.go
 │
 ├── internal/
+│   ├── detect/               format detection, limits before allocation
 │   ├── pdf/                  text-layer extraction     ── ADR-0011
+│   ├── office/               DOCX, XLSX and CSV text
 │   ├── img/                  image decoding, normalisation
-│   ├── pipeline/             stage orchestration
 │   ├── prompt/               instruction construction  ── ADR-0017
+│   ├── retry/                the one schema-invalid follow-up request
 │   ├── normalise/            offset-preserving text normalisation
+│   ├── layout/               the neutral table and key-value model
+│   ├── schema/               struct-tag reflection     ── ADR-0005
 │   ├── jsonschema/           Schema to JSON Schema
 │   ├── validate/             rule evaluation
 │   ├── ground/               value-to-source matching
+│   ├── compare/              two readings, one verdict ── ADR-0014
 │   ├── adaptertest/          the shared contract suite ── ADR-0022
-│   ├── sandbox/              offline provider server
-│   └── testutil/
+│   └── sandbox/              offline provider server
 │
 ├── model/skyl/               own go.mod                ── ADR-0008
 ├── ocr/tesseract/            own go.mod
@@ -50,10 +59,10 @@ ovrin/                        module github.com/BAGOMBEKA-JOB-DEV/ovrin
 ├── ocr/textract/             own go.mod — AWS Textract
 ├── ocr/azure/                own go.mod
 ├── render/pdfium/            own go.mod, Wazero        ── ADR-0010
-├── render/pdfiumcgo/         own go.mod, cgo — opt-in
 ├── otel/                     own go.mod                ── ADR-0021
 │
 ├── eval/                     corpus and harness        ── ADR-0023
+├── examples/receipt/         own go.mod — a runnable end-to-end example
 └── docs/
 ```
 
@@ -65,9 +74,9 @@ flowchart TD
     user["your application"] --> core
 
     subgraph core["ovrin — zero dependencies"]
-        api["Extract[T] · Client · Result[T]"]
+        api["Extract[T] · Client · Result[T]<br/>pipeline · assemble · scorer"]
         seams["Model · OCR · Renderer"]
-        impl["internal/ — pdf, pipeline, prompt,<br/>normalise, validate, ground"]
+        impl["internal/ — pdf, office, prompt,<br/>normalise, validate, ground, compare"]
         api --> impl
         impl --> seams
     end
@@ -97,6 +106,14 @@ shaped like a public type declares its own — `prompt.Request` mirrors
 `ModelRequest` field for field — and the root converts at the boundary. The
 conversion is mechanical and deliberately boring; that boringness is the price
 of the public types being owned by exactly one package.
+
+It is also why `pipeline.go` sits in the root rather than under `internal/`.
+The orchestration touches nearly the whole public type set, so an internal
+package would have needed a local twin of `Model`, `OCR`, `Page`, `Content`,
+`FieldResult`, `Signal`, `Provenance`, `Metadata` and `Event`, converted at
+every stage boundary — a great deal of mechanical code bought for a boundary
+that unexported identifiers already give. `assemble.go`, `scorer.go` and
+`crossfield.go` are in the root for the same reason.
 
 ---
 
@@ -385,6 +402,7 @@ type FieldEvidence struct {
     Reading    Reading
     OCRConfidence *float64   // nil when the value did not come from OCR
     Grounding  float64
+    Ambiguous  bool          // a declared format parsed, but two ways
     Provenance []Provenance
     Candidates []Candidate
     Agreement  *float64      // nil when only one reading ran

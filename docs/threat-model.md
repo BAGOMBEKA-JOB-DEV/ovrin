@@ -131,7 +131,14 @@ panic or an incorrect result, not code execution. The parser is written in-tree
 ([ADR-0011](adr/0011-pdf-text-extraction.md)) with no cgo anywhere in the core
 (rule [§4.3](rules.md#4-dependencies)), so no C parser is in the path. All
 lengths and indices are bounds-checked against actual data, never trusted from
-the file. Fuzzing runs against the PDF parser and the normaliser on a schedule.
+the file. Nine fuzz targets cover the paths that read attacker-controlled
+bytes: three over the PDF parser — structure, content streams and CMaps — and
+one each over format detection, the office readers, the normaliser, image
+decoding, prompt construction and two-reading comparison. They run on demand
+via `make fuzz`, **not on a schedule**: there is no scheduled fuzzing workflow
+in this repository, and until there is, fuzzing catches only what somebody
+thought to run it for. A crasher that is found is committed as a seed under the
+package's `testdata/fuzz/`, so the regression suite keeps it fixed for free.
 
 **Residual risk.** A panic in the parser is a crash for the calling service.
 The parser recovers panics at the extraction boundary and converts them into

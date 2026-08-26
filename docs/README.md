@@ -31,7 +31,7 @@ came first, and the documentation checks keep it honest about the code.
 
 ## Architecture decision records
 
-Twenty-five decisions, each with the alternatives that lost and the costs that
+Thirty decisions, each with the alternatives that lost and the costs that
 were accepted. The [index](adr/README.md) has the full list; these are the ones
 that shape the most.
 

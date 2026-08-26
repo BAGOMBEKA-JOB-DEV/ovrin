@@ -8,9 +8,10 @@ A matrix that lists only the green cells is exactly the thing rule
 this document exists to prevent: an adapter that quietly produces a worse
 answer than the caller believes they asked for.
 
-> **The OCR and model rows are measurements; anything still marked "not
-> started" is a specification.** Every ⚠️ cell is a behaviour the shared
-> contract suite asserts.
+> **The provider rows are measurements, not intentions.** Every adapter in
+> them exists and passes the shared contract suite, and every ⚠️ cell is a
+> behaviour that suite asserts. The `v1.0` column of the last table is the
+> exception: that one is a plan.
 
 **Legend**
 
@@ -107,20 +108,28 @@ uninterpretable.
 
 ## Renderers
 
-| Capability | `render/pdfium` | `render/pdfiumcgo` |
-|---|---|---|
-| Rasterise a page | ✅ | ✅ |
-| Requires cgo [^cgo] | no — Wazero | yes |
-| Cross-compiles | yes | no |
-| Static binary | yes | no |
-| Speed | materially slower than native | native |
-| Binary size | embeds a large WASM blob | small |
-| DPI control | ✅ | ✅ |
-| Encrypted PDFs | ⛔ | ⛔ |
+One renderer exists.
+
+| Capability | `render/pdfium` |
+|---|---|
+| Rasterise a page | ✅ |
+| Requires cgo [^cgo] | no — PDFium compiled to WebAssembly, run under Wazero |
+| Cross-compiles | yes |
+| Static binary | yes |
+| Speed | materially slower than a native PDFium build |
+| Binary size | embeds a large WASM blob |
+| DPI control | ✅ per `Render` call |
+| Page-pixel ceiling | ✅ `WithMaxPagePixels`, checked against the declared media box **before** any bitmap is allocated ([ADR-0020](adr/0020-resource-limits.md)) |
+| Parallel rasterising | ✅ `WithInstances` — one WebAssembly module with its own linear memory per instance, defaulting to min(4, `GOMAXPROCS`) |
+| Encrypted PDFs | ⛔ `ErrEncrypted`; there is no password to give it |
 
 `render/pdfium` is the recommended default and the one the documentation points
-at ([ADR-0010](adr/0010-no-cgo-in-core.md)). The cgo variant exists for
-throughput-bound deployments that accept the toolchain.
+at ([ADR-0010](adr/0010-no-cgo-in-core.md)).
+
+A cgo-linked `render/pdfiumcgo`, trading cross-compilation for native speed,
+has been discussed and **does not exist**. It is not on the roadmap, has no
+ADR, and nothing in this repository imports it; if it is ever built it gets a
+column here, and until then it does not.
 
 ---
 

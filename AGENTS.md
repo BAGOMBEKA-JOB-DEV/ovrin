@@ -26,7 +26,7 @@ wins for *conventions* and `docs/` wins for *decisions*. An ADR beats both.
 You are a **senior Go library engineer**. The stack is locked: Go 1.22 or
 newer, standard library only in the core module, no cgo in the core, Apache-2.0.
 
-You are **not** allowed to invent requirements. Twenty-five architecture
+You are **not** allowed to invent requirements. Thirty architecture
 decision records already settle the load-bearing questions. If a task seems to
 require contradicting one, stop and say so — the answer is a superseding ADR,
 not a quiet deviation.
@@ -41,7 +41,7 @@ promise to strangers.
 | # | Path | Why |
 |---|---|---|
 | 1 | [`docs/rules.md`](docs/rules.md) | The engineering rules. CI enforces most; review enforces the rest. Everything below cites its § numbers. |
-| 2 | [`docs/adr/README.md`](docs/adr/README.md) | Index of 25 decisions. Read the ones your task touches. |
+| 2 | [`docs/adr/README.md`](docs/adr/README.md) | Index of 30 decisions. Read the ones your task touches. |
 | 3 | [`docs/architecture.md`](docs/architecture.md) | Modules, seams, and which way dependencies point |
 | 4 | [`docs/pipeline.md`](docs/pipeline.md) | The nine stages and what each one owes the next |
 | 5 | [`docs/schema.md`](docs/schema.md) | The tag grammar — the spec, not a summary |
@@ -118,30 +118,39 @@ Violating any of these means the change is rejected.
 ```text
 ovrin/                     module github.com/BAGOMBEKA-JOB-DEV/ovrin
 │                          zero dependencies · no cgo · Go 1.22
+├── doc.go                 the package overview
 ├── ovrin.go               Client, Option, New, Extract[T]
 ├── result.go              Result[T], FieldResult, Candidate, Explanation
 ├── source.go              Source, Document, Kind, detection
-├── schema.go              struct-tag reflection
 ├── model.go   ocr.go   render.go      THE SEAMS — CODEOWNER-protected
 ├── chain.go               OCRChain, ModelChain
+├── layout.go              Layout, Table, KeyValue across the OCR seam
+├── pipeline.go            stage orchestration — root package on purpose
+├── assemble.go            the schema walk: validate, ground, score, write
+├── scorer.go              the default Scorer and its weights
 ├── confidence.go          Signal, Scorer
+├── crossfield.go          CrossFieldRule
 ├── provenance.go          Provenance, Rect, Span
 ├── limits.go  hook.go  errors.go
 ├── example_test.go        runnable documentation — rules.md §9.3
 │
 ├── internal/              ← put implementation HERE by default
+│   ├── detect/            format detection, limits before allocation
 │   ├── pdf/               text-layer extraction
-│   ├── pipeline/          stage orchestration
+│   ├── office/            DOCX, XLSX, CSV
 │   ├── prompt/            instruction construction — SECURITY BOUNDARY
+│   ├── retry/             the one schema-invalid follow-up request
 │   ├── normalise/         offset-preserving normalisation
-│   ├── validate/  ground/  jsonschema/  img/
+│   ├── layout/  schema/  jsonschema/  img/
+│   ├── validate/  ground/  compare/
 │   ├── adaptertest/       the shared contract suite
-│   └── sandbox/  testutil/
+│   └── sandbox/
 │
 ├── model/skyl/   ocr/tesseract/   ocr/google/
 ├── ocr/textract/   ocr/azure/
-├── render/pdfium/   render/pdfiumcgo/   otel/   ← each its own go.mod
+├── render/pdfium/   otel/   ← each its own go.mod
 ├── eval/                  corpus and harness
+├── examples/receipt/      own go.mod — a runnable end-to-end example
 └── docs/
 ```
 
@@ -149,12 +158,12 @@ ovrin/                     module github.com/BAGOMBEKA-JOB-DEV/ovrin
 
 | Change | Location |
 |---|---|
-| New behaviour in the pipeline | `internal/pipeline/` — not the root package |
+| New behaviour in the pipeline | `pipeline.go` in the **root package** — the orchestration is deliberately not under `internal/`, because it touches nearly the whole public type set |
 | A new public type | Root, and only with a reason. Default is `internal/` (§1.7) |
 | A new provider | `ocr/<name>/` or `model/<name>/`, **its own `go.mod`** |
 | Anything needing a dependency | An adapter module. Never the core (§4.1) |
 | A new validation rule | `internal/validate/` + the vocabulary in `docs/schema.md` |
-| A new confidence signal | `confidence.go` + `docs/confidence.md` + ADR-0013 |
+| A new confidence signal | `confidence.go` and `scorer.go` + `docs/confidence.md` + ADR-0013 |
 | Prompt changes | `internal/prompt/` — read ADR-0017 first |
 
 ---
@@ -249,8 +258,8 @@ fixtures contain no real personal data (§7.6).
 ## 9. What to do **right now** when you pick up a task
 
 1. Check [`docs/project-plan.md`](docs/project-plan.md) for current state and
-   what is blocked. Much of this repository describes software that does not
-   exist yet.
+   what is blocked. The code exists; what is missing is evidence, and the plan
+   says which kind.
 2. Read [`docs/rules.md`](docs/rules.md) in full. It is 340 lines and it is the
    contract.
 3. Read the ADRs your task touches, from [`docs/adr/README.md`](docs/adr/README.md).

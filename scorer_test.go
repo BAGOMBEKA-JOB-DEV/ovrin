@@ -8,6 +8,7 @@
 package ovrin
 
 import (
+	"context"
 	"math"
 	"testing"
 
@@ -155,4 +156,119 @@ func TestGroundingThatDidNotRunIsNotACap(t *testing.T) {
 	if math.Abs(conf-1.0) > 1e-9 {
 		t.Errorf("confidence = %.2f; with only a passing schema signal it should be 1.00", conf)
 	}
+}
+
+// Result.Confidence must be the aggregate of the confidences the caller can
+// see in Result.Fields.
+//
+// It was not. Cross-field rules run after every field has been scored and
+// rescore the fields they read, but the aggregate was averaged from a snapshot
+// taken before that — so a document with a failing cross-field rule reported a
+// headline confidence that no arithmetic over Fields could reproduce. The
+// whole promise of this library is that the number is checkable.
+func TestAggregateMatchesTheFieldsAfterCrossFieldRules(t *testing.T) {
+	t.Parallel()
+
+	type Invoice struct {
+		Subtotal float64 `ovrin:"subtotal,required,min=0"`
+		Tax      float64 `ovrin:"tax,required,min=0"`
+		Total    float64 `ovrin:"total,required,min=0"`
+	}
+
+	// 10 + 2 != 99. The rule fails, and every field it read is rescored.
+	c := New(
+		WithModel(fixedModel{`{"subtotal":10,"tax":2,"total":99}`}),
+		WithCrossField(Sum("total", Tolerance{Absolute: 0.01}, "subtotal", "tax")),
+	)
+
+	res, err := Extract[Invoice](context.Background(), c,
+		Bytes([]byte("subtotal,tax,total\n10.00,2.00,99.00\n")))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	// Recompute the documented aggregate from what the caller can see:
+	// the mean over fields, required weighted 1 and optional 0.5. Every field
+	// here is required.
+	var sum float64
+	for _, k := range []string{"subtotal", "tax", "total"} {
+		f, ok := res.Fields[k]
+		if !ok {
+			t.Fatalf("field %q is missing from the result", k)
+		}
+		sum += f.Confidence
+	}
+	want := sum / 3
+
+	if math.Abs(res.Confidence-want) > 0.005 {
+		t.Errorf("Result.Confidence = %.4f, but the fields average %.4f; "+
+			"the headline number cannot be reproduced from Fields",
+			res.Confidence, want)
+	}
+}
+
+// fixedModel returns one reply, whatever it is asked.
+type fixedModel struct{ body string }
+
+func (m fixedModel) Generate(context.Context, ModelRequest) (*ModelResponse, error) {
+	return &ModelResponse{JSON: []byte(m.body)}, nil
+}
+
+// An ambiguous date is not a malformed one.
+//
+// docs/schema.md: "the format signal drops. It does not drop to zero — the
+// text is a well-formed date". It used to drop to zero: validate.FormatSignal
+// had the ambiguity branch, the assembler called it and discarded the answer
+// with `_ = v`, and the scorer's own formatSignal only ever returned 1 or 0.
+// So 03/04/2026 scored the same as "not a date at all".
+func TestAnAmbiguousFormatDropsButNotToZero(t *testing.T) {
+	t.Parallel()
+
+	base := []RuleResult{{Rule: "format=date", Passed: true}}
+
+	unambiguous, _ := defaultScorer{}.Score(FieldEvidence{
+		Found: true, Validation: base,
+	})
+	ambiguous, signals := defaultScorer{}.Score(FieldEvidence{
+		Found: true, Validation: base, Ambiguous: true,
+	})
+
+	if !(ambiguous < unambiguous) {
+		t.Errorf("ambiguous %.2f is not below unambiguous %.2f; the signal did not drop",
+			ambiguous, unambiguous)
+	}
+	if ambiguous == 0 {
+		t.Error("an ambiguous date scored zero; it is a well-formed date")
+	}
+
+	var format *Signal
+	for i := range signals {
+		if signals[i].Name == SignalFormat {
+			format = &signals[i]
+		}
+	}
+	if format == nil {
+		t.Fatal("no format signal at all")
+	}
+	if format.Value <= 0 || format.Value >= 1 {
+		t.Errorf("format signal = %.2f, want strictly between 0 and 1", format.Value)
+	}
+	// The note has to say why, or a reviewer sees a lowered number with no
+	// explanation — which is the failure Explain exists to prevent.
+	if !contains(format.Note, "ambiguous") {
+		t.Errorf("format note = %q, which does not mention ambiguity", format.Note)
+	}
+}
+
+func contains(s, sub string) bool {
+	return len(sub) == 0 || (len(s) >= len(sub) && indexOf(s, sub) >= 0)
+}
+
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
 }

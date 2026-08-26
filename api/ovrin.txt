@@ -6,9 +6,10 @@
 # The format follows Go's own api/go1.N.txt. Parameter names are dropped —
 # a rename should not churn this file; `go mirror` fences check those.
 #
-# Until the code exists this file is hand-authored and is the SPECIFICATION:
-# the generator is red until the source matches it. See ADR-0024 for what
-# happens to this file at v1.0.
+# Never edit it by hand: an entry the generator would not produce is a claim
+# about the public surface that the public surface does not make. Regenerate
+# after an intended API change and read the diff. See ADR-0024 for what happens
+# to this file at v1.0.
 #
 pkg ovrin, const CapDisagreement float64
 pkg ovrin, const CapRuleFailed float64
@@ -198,6 +199,7 @@ pkg ovrin, type Explanation struct, Value any
 pkg ovrin, type FieldEvidence struct
 pkg ovrin, type FieldEvidence struct, Agreement *float64
 pkg ovrin, type FieldEvidence struct, AgreementNote string
+pkg ovrin, type FieldEvidence struct, Ambiguous bool
 pkg ovrin, type FieldEvidence struct, Candidates []Candidate
 pkg ovrin, type FieldEvidence struct, Field string
 pkg ovrin, type FieldEvidence struct, Found bool
