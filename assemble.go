@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,13 +42,14 @@ func assemble[T any](ctx context.Context, out *outcome, sch *schema.Schema, cfg 
 	)
 
 	a := &assembler{
-		out:     out,
-		cfg:     cfg,
-		v:       v,
-		fields:  make(map[string]FieldResult),
-		values:  make(validate.Fields),
-		alt:     alt,
-		suspect: pagesWithFindings(out.findings),
+		out:      out,
+		cfg:      cfg,
+		v:        v,
+		fields:   make(map[string]FieldResult),
+		values:   make(validate.Fields),
+		alt:      alt,
+		suspect:  pagesWithFindings(out.findings),
+		findings: out.findings,
 	}
 	// Validation and grounding both happen inside the walk, interleaved per
 	// field, so there is no separate pass to time. They are reported as two
@@ -109,6 +111,7 @@ type assembler struct {
 	// per-field Confidence values then disagreed whenever a cross-field rule
 	// applied. Holding keys and reading a.fields at the end means there is one
 	// source of truth and no ordering to get wrong.
+	findings []normalise.Finding
 	grounded int      // fields grounding was able to look for
 	required []string // keys of required fields
 	optional []string
@@ -341,6 +344,31 @@ func (a *assembler) suspicious() bool {
 	return len(a.suspect) > 0
 }
 
+// suspicionReasons returns one content-free sentence per distinct finding.
+//
+// Deduplicated and sorted: the same finding is recorded per page, and a field
+// on a ten-page document should not produce ten identical review reasons in
+// whatever order a map iterated.
+func (a *assembler) suspicionReasons() []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(a.findings))
+	for _, f := range a.findings {
+		why := f.Why()
+		if seen[why] {
+			continue
+		}
+		seen[why] = true
+		out = append(out, why)
+	}
+	if len(out) == 0 {
+		// A page was flagged but carried no describable finding. Say
+		// something rather than nothing.
+		return []string{"the source carried content that looked like an injection attempt"}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result, gr ground.Result, conf float64, cands []Candidate) {
 	add := func(why string) { a.reasons = append(a.reasons, ReviewReason{Field: key, Why: why}) }
 
@@ -357,7 +385,18 @@ func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result
 		add("the date is ambiguous and ovrin will not guess which reading is meant")
 	}
 	if a.suspicious() {
-		add("the source carried content that looked like an injection attempt")
+		// Say which kind, not just that there was one.
+		//
+		// Finding.Why() is a fixed phrase per kind plus a codepoint, a page
+		// and a count — no document text, by construction — and the five
+		// kinds want five different responses from a reviewer. "Text in the
+		// background colour of page 3" sends someone to look at page 3;
+		// "instruction-shaped language in document metadata" sends them
+		// somewhere else entirely. Collapsing both into one sentence made the
+		// detectors' whole vocabulary invisible to the person acting on it.
+		for _, why := range a.suspicionReasons() {
+			add(why)
+		}
 	}
 	if conf < a.cfg.reviewThreshold && vr.Found {
 		add("confidence is below the review threshold")
