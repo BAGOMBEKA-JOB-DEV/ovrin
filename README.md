@@ -148,6 +148,7 @@ Run `make` with no arguments at any time to list every target.
 | `make fmt-check` | Fail if anything is not `gofmt`'d |
 | `make vet` | `go vet` under every build tag |
 | `make lint` | `golangci-lint` |
+| `make actions` | Validate the GitHub Actions workflow files |
 | `make vuln` | `govulncheck` |
 | `make tidy` / `make tidy-check` | `go mod tidy`; the check fails if it left a diff |
 | `make deps-check` | Assert the core has zero external dependencies |

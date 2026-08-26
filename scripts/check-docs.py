@@ -348,7 +348,7 @@ def check_make_targets():
             declared.add(m.group(1))
 
     # Targets that exist as plumbing and need no entry of their own.
-    internal = {"tools-lint", "tools-vuln"}
+    internal = {"tools-lint", "tools-vuln", "tools-actions"}
 
     documented = set()
     for p in markdown_files():

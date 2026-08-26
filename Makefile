@@ -37,6 +37,7 @@ DOCKER  ?= docker
 # findings, which makes `make lint` passing locally mean nothing.
 GOLANGCI_LINT_VERSION ?= v2.12.2
 GOVULNCHECK_VERSION   ?= v1.1.4
+ACTIONLINT_VERSION    ?= v1.7.12
 
 # docs/rules.md §3.7. Never lower this to make a red build green.
 COVERAGE_FLOOR ?= 85
@@ -111,7 +112,7 @@ hooks: ## Enable the commit-message sign-off hook
 	@echo "core.hooksPath = .githooks"
 
 .PHONY: tools
-tools: tools-lint tools-vuln ## Install golangci-lint and govulncheck at the versions CI pins
+tools: tools-lint tools-vuln tools-actions ## Install the linters and checkers CI uses, at CI's versions
 
 # GOTOOLCHAIN=auto is set for these two, and only these two.
 #
@@ -128,6 +129,15 @@ tools-lint:
 
 # Split out so CI's vuln job can install just this one and still take the
 # version from here. Two copies of a pinned version is two things to forget.
+# actionlint validates the workflow files themselves. Worth its own target
+# because a workflow file that GitHub rejects fails in zero seconds with
+# "this run likely failed because of a workflow file issue" and no line number
+# — which is how an invalid `if:` sat in ci.yml through every push, failing
+# every run, while the repository looked like it had CI.
+.PHONY: tools-actions
+tools-actions:
+	GOTOOLCHAIN=auto $(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
+
 .PHONY: tools-vuln
 tools-vuln:
 	GOTOOLCHAIN=auto $(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
@@ -246,6 +256,14 @@ vet: ## Vet every build, tagged ones included
 
 # `golangci-lint: not found` from inside a for-loop is a confusing way to
 # learn you have not run `make setup`. Say the useful thing instead.
+.PHONY: actions
+actions: ## Validate the GitHub Actions workflow files
+	@command -v actionlint >/dev/null || { \
+		echo "actionlint is not installed — run 'make tools-actions' (or 'make setup')"; \
+		exit 1; }
+	@actionlint
+	@echo "workflows valid"
+
 .PHONY: lint
 lint: ## Run golangci-lint on every module
 	@command -v golangci-lint >/dev/null || { \
@@ -309,7 +327,7 @@ corpus: ## Regenerate the synthetic evaluation corpus in place
 ##@ Aggregates
 
 .PHONY: check
-check: fmt-check build vet test test-sandbox tidy-check lint vuln docs ## The gate to run before opening a pull request
+check: fmt-check build vet test test-sandbox tidy-check lint vuln docs actions ## The gate to run before opening a pull request
 	@printf '\n\033[32mcheck passed\033[0m\n'
 
 .PHONY: ci
