@@ -126,6 +126,31 @@ image, plus cloud OCR providers that accept a PDF directly.
 
 ---
 
+## The client
+
+```go mirror
+// Client holds the providers, limits and policy an extraction runs under.
+// It is built once and shared; every method is safe for concurrent use.
+type Client struct{ /* unexported */ }
+
+// Option configures a Client, or one Extract call. See ADR-0026.
+type Option func(*config)
+
+func New(opts ...Option) *Client
+```
+
+`New` panics if given `WithModel(nil)` — a nil provider is programmer error at
+construction, and the alternative is a nil dereference on the first extraction,
+thousands of lines from the mistake (rule [§1.6](rules.md#1-public-api)).
+Omitting `WithModel` entirely is *configuration*, not a programmer error, and
+surfaces as `ErrNoProvider` from `Extract`.
+
+`Option` is a func over an unexported `config`, which is what lets the same type
+apply both to `New` and to a single `Extract` call without exporting a config
+struct (rule [§1.4](rules.md#1-public-api)).
+
+---
+
 ## Why the client is not the interface
 
 `New` returns `*Client`, a struct, not an interface
@@ -183,12 +208,182 @@ which has a name, a weight and a one-line note.
 **Every value points back at the document.** `Provenance` carries the reading,
 page, box and span, which is what makes review and audit possible.
 
+### The supporting types
+
+Everything `Result[T]` and the seams refer to. Declared here so that no type in
+this project is used without a definition somewhere.
+
+```go mirror
+// Op names a pipeline stage. It appears on both Error and Event so that a
+// trace and an error use the same word. See ADR-0027.
+type Op string
+
+const (
+    OpUnknown   Op = ""
+    OpDetect    Op = "detect"
+    OpAcquire   Op = "acquire"
+    OpRender    Op = "render"     // within acquire
+    OpOCR       Op = "ocr"        // within acquire
+    OpNormalise Op = "normalise"
+    OpSchema    Op = "schema"
+    OpPrompt    Op = "prompt"
+    OpGenerate  Op = "generate"
+    OpValidate  Op = "validate"
+    OpGround    Op = "ground"
+    OpScore     Op = "score"
+)
+
+// Reading is how a value was read. It describes the past. See ADR-0028.
+type Reading string
+
+const (
+    ReadingUnknown Reading = ""
+    ReadingText    Reading = "text"
+    ReadingOCR     Reading = "ocr"
+    ReadingVision  Reading = "vision"
+)
+
+// ReadingMode selects how a document should be read. It describes an
+// intention, and is the argument to WithReading. See ADR-0028.
+type ReadingMode string
+
+const (
+    ReadingAuto ReadingMode = "auto"   // staged, per ADR-0012. The default.
+    ModeText    ReadingMode = "text"
+    ModeOCR     ReadingMode = "ocr"
+    ModeVision  ReadingMode = "vision"
+    ModeBoth    ReadingMode = "both"   // two readings, per ADR-0014
+)
+
+// Kind is a document format, determined by content and never by filename.
+type Kind string
+
+const (
+    KindUnknown Kind = ""
+    KindPDF     Kind = "pdf"
+    KindPNG     Kind = "png"
+    KindJPEG    Kind = "jpeg"
+    KindTIFF    Kind = "tiff"
+    KindWebP    Kind = "webp"
+    KindDOCX    Kind = "docx"
+    KindXLSX    Kind = "xlsx"
+    KindCSV     Kind = "csv"
+)
+
+// DateOrder resolves ambiguous numeric dates such as 03/04/2026. The zero
+// value flags them for review rather than guessing.
+type DateOrder string
+
+const (
+    DateOrderUnknown DateOrder = ""
+    DayFirst         DateOrder = "dmy"
+    MonthFirst       DateOrder = "mdy"
+    YearFirst        DateOrder = "ymd"
+)
+
+// Document is a Source whose format has been identified.
+type Document struct {
+    Kind  Kind
+    Pages int
+    Bytes int64
+}
+
+// Page is one rasterised page, handed to an OCR provider.
+type Page struct {
+    Number int          // 1-based
+    Image  image.Image
+    Width  float64      // page points
+    Height float64      // page points
+    DPI    int
+}
+
+// Rect is a region of a page, in points, origin top-left. That origin is
+// neither PDF's nor an image format's; one had to be chosen, and adapters
+// normalise to it.
+type Rect struct{ MinX, MinY, MaxX, MaxY float64 }
+
+// Span is a byte range into the normalised text. Bytes, not runes: Go strings
+// are bytes, and converting would cost a copy at every boundary.
+type Span struct{ Start, End int }
+
+// Line is a run of words sharing a baseline.
+type Line struct {
+    Text string
+    Box  Rect
+    Page int
+}
+
+// Content is one piece of material handed to a Model. It is always untrusted.
+type Content struct {
+    Reading   Reading
+    Page      int
+    Text      string   // set when Reading is text or ocr
+    Image     []byte   // set when Reading is vision; raw, never base64
+    MediaType string   // required when Image is set
+}
+
+// Usage counts what an extraction consumed. Page units are what OCR providers
+// bill; tokens are what models bill.
+type Usage struct {
+    InputTokens  int
+    OutputTokens int
+    PageUnits    int
+}
+
+// Metadata records how a result was produced.
+type Metadata struct {
+    Readings  []Reading
+    Providers map[Op]string     // which adapter served each stage
+    Kind      Kind
+    Pages     int
+    Usage     Usage
+    Duration  time.Duration
+}
+
+// ReviewReason names a field and why it needs a person. It never carries the
+// value: rule §7.5.
+type ReviewReason struct {
+    Field string
+    Why   string
+}
+
+// RuleResult is one validation rule and its outcome. Message rather than error,
+// so an Explanation marshals to JSON.
+type RuleResult struct {
+    Rule    string   // "required", "min=0", "format=date"
+    Passed  bool
+    Message string
+}
+
+// FieldEvidence is everything the pipeline collected about one field. It is
+// the input to a Scorer.
+type FieldEvidence struct {
+    Field      string
+    Value      any
+    Found      bool
+    Reading    Reading
+    OCRConf    *float64      // nil when the value did not come from OCR
+    Grounding  float64
+    Provenance []Provenance
+    Candidates []Candidate
+    Validation []RuleResult
+    Suspicious bool
+}
+```
+
 ### Sources
 
 `Extract` takes a `Source`, not a file. Three constructors cover the ways a
 document arrives:
 
-```go
+```go mirror
+// Source is an unread document. The interface is closed — it has an
+// unexported method — so the only Sources are the three below. An open
+// interface would let a caller supply something no stage knows how to read.
+type Source interface {
+    isSource()
+}
+
 func Reader(r io.Reader) Source   // an upload, a network body, a pipe
 func Bytes(b []byte) Source       // already in memory
 func File(path string) Source     // on disk
