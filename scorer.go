@@ -114,7 +114,19 @@ func (defaultScorer) Score(f FieldEvidence) (float64, []Signal) {
 	if ruleFailed {
 		cap(CapRuleFailed, "capped:rule", "a declared rule failed")
 	}
-	if f.Grounding == ground.NotFound && len(f.Provenance) == 0 && hasSignal(signals, SignalGrounding) {
+	// The grounding signal exists only when grounding ran at all — it is added
+	// above when Grounding > 0 or a Provenance entry was recorded, and
+	// assemble records one exactly when ground reported Applicable. So its
+	// presence already means "we looked", and a value of NotFound means "we
+	// looked and it is not there". That is the fabrication case, and this is
+	// the ceiling ADR-0013 puts on it.
+	//
+	// This used to additionally require len(f.Provenance) == 0, which made the
+	// whole condition a contradiction: the signal is only present when
+	// Grounding > 0 or Provenance is non-empty, and the cap demanded both be
+	// otherwise. The 0.35 ceiling could never bind, and the worked example in
+	// docs/explainability.md could not occur.
+	if f.Grounding == ground.NotFound && hasSignal(signals, SignalGrounding) {
 		cap(CapUngrounded, "capped:grounding", "the value is not in the source")
 	}
 	if len(f.Candidates) > 1 {
