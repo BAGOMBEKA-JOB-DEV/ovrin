@@ -837,6 +837,7 @@ func acquireByDocumentOCR(ctx context.Context, cfg *config, d DocumentOCR, doc D
 			Number:  i + 1,
 			Reading: prompt.Reading(ReadingOCR),
 			Text:    pageText(res, i),
+			Tables:  tables[i],
 		})
 	}
 
