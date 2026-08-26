@@ -1,6 +1,7 @@
 package compare
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -65,14 +66,14 @@ func TestNumbersAgree(t *testing.T) {
 		{name: "leading_plus", a: "+1234", b: 1234.0, kind: KindNumber, want: true},
 		{name: "surrounding_whitespace", a: "  42  ", b: 42.0, kind: KindNumber, want: true},
 		{name: "fullwidth_digits", a: "２５，０００", b: 25000.0, kind: KindNumber, want: true},
-		{name: "zero_width_space_inside_digits", a: "25​000", b: 25000.0, kind: KindNumber, want: true},
+		{name: "zero_width_space_inside_digits", a: "25\u200b000", b: 25000.0, kind: KindNumber, want: true},
 		{name: "currency_symbol_before", a: "$1,000.00", b: 1000.0, kind: KindNumber, want: true},
 		{name: "currency_code_after", a: "1,000.00 USD", b: 1000.0, kind: KindNumber, want: true},
 		{name: "unit_after", a: "1.5 kg", b: 1.5, kind: KindNumber, want: true},
 		{name: "trailing_zeros_in_decimal", a: "25.50", b: 25.5, kind: KindNumber, want: true},
 		{name: "json_round_trip_drift", a: 0.1 + 0.2, b: 0.3, kind: KindNumber, want: true},
 		{name: "zero_is_a_value", a: "0", b: 0.0, kind: KindNumber, want: true},
-		{name: "negative_zero", a: -0.0, b: 0.0, kind: KindNumber, want: true},
+		{name: "negative_zero", a: math.Copysign(0, -1), b: 0.0, kind: KindNumber, want: true},
 		{name: "kind_inferred_from_the_typed_reading", a: "25,000", b: 25000.0, kind: KindUnknown, want: true},
 	})
 }
@@ -172,7 +173,7 @@ func TestStringsAgree(t *testing.T) {
 		{name: "decomposed_accent", a: "café", b: "café", kind: KindString, want: true},
 		{name: "sharp_s_folds_to_ss", a: "STRASSE 1", b: "Straße 1", kind: KindString, want: true},
 		{name: "final_sigma_folds_to_sigma", a: "ΟΔΟΣ", b: "οδος", kind: KindString, want: true},
-		{name: "zero_width_joiner_inside_a_word", a: "Ac‍me", b: "Acme", kind: KindString, want: true},
+		{name: "zero_width_joiner_inside_a_word", a: "Ac\u200dme", b: "Acme", kind: KindString, want: true},
 		{name: "roman_numeral_compatibility_form", a: "Chapter Ⅻ", b: "Chapter XII", kind: KindString, want: true},
 	})
 }
@@ -430,4 +431,147 @@ func knownReason(s string) bool {
 		return true
 	}
 	return false
+}
+
+// TestThroughPointersAndNamedTypes checks the shapes a reflected schema
+// actually produces: an optional field is a pointer, and a field declared as
+// `type Amount float64` is not a float64 to a type switch.
+func TestThroughPointersAndNamedTypes(t *testing.T) {
+	t.Parallel()
+	type amount float64
+	type name string
+	type flag bool
+
+	s := "Acme Ltd"
+	f := 25000.0
+	b := true
+	when := time.Date(2026, time.April, 3, 0, 0, 0, 0, time.UTC)
+	a := amount(25000)
+	n := name("ACME LTD")
+	fl := flag(true)
+
+	run(t, []equalCase{
+		{name: "pointer_to_string", a: &s, b: "acme ltd", kind: KindString, want: true},
+		{name: "pointer_to_float", a: &f, b: "25,000", kind: KindNumber, want: true},
+		{name: "pointer_to_bool", a: &b, b: "Yes", kind: KindBool, want: true},
+		{name: "pointer_to_time", a: &when, b: "03/04/26", kind: KindDate, want: true},
+		{name: "named_float", a: a, b: "25,000", kind: KindNumber, want: true},
+		{name: "named_float_inferred", a: a, b: "25,000", kind: KindUnknown, want: true},
+		{name: "named_string", a: n, b: "Acme Ltd", kind: KindString, want: true},
+		{name: "named_string_as_currency", a: name("$100"), b: "100 USD", kind: KindCurrency, want: true},
+		{name: "named_string_as_date", a: name("2026-04-03"), b: "3 April 2026", kind: KindDate, want: true},
+		{name: "named_bool", a: fl, b: "true", kind: KindBool, want: true},
+		{name: "pointer_to_named_float", a: &a, b: 25000.0, kind: KindNumber, want: true},
+		{name: "unsigned_integer", a: uint(42), b: "42", kind: KindNumber, want: true},
+		{name: "narrow_integer", a: int32(42), b: 42.0, kind: KindNumber, want: true},
+		{name: "narrow_float", a: float32(1.5), b: "1.5", kind: KindNumber, want: true},
+		{name: "named_string_slice", a: []name{"Acme"}, b: []string{"ACME"}, kind: KindSlice, want: true},
+	})
+}
+
+// TestNonFiniteNumbersFallBackToText records what happens to a value no
+// document could contain. A NaN is not equal to itself, so comparing two of
+// them as numbers would make comparison non-reflexive; they are compared as
+// text instead, where two readings that produced the same nonsense agree that
+// they did.
+func TestNonFiniteNumbersFallBackToText(t *testing.T) {
+	t.Parallel()
+	nan := math.NaN()
+	cases := []struct {
+		name         string
+		a, b         any
+		wantEqual    bool
+		wantFallback bool
+	}{
+		{name: "nan_against_itself", a: nan, b: nan, wantEqual: true, wantFallback: true},
+		{name: "nan_against_a_number", a: nan, b: 1.0, wantEqual: false, wantFallback: true},
+		{name: "infinity_against_itself", a: math.Inf(1), b: math.Inf(1), wantEqual: true, wantFallback: true},
+		{name: "infinity_against_negative_infinity", a: math.Inf(1), b: math.Inf(-1), wantEqual: false, wantFallback: true},
+		{name: "very_large_but_finite", a: 1e308, b: 1e308, wantEqual: true},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := Values(tc.a, tc.b, KindNumber)
+			if !got.Applicable {
+				t.Fatalf("Applicable = false: %+v", got)
+			}
+			if got.Equal != tc.wantEqual || got.Fallback != tc.wantFallback {
+				t.Errorf("Equal = %v, Fallback = %v, want %v and %v", got.Equal, got.Fallback, tc.wantEqual, tc.wantFallback)
+			}
+		})
+	}
+}
+
+// TestAbsent covers the shapes that mean "this reading found nothing", since
+// getting one of them wrong turns a missing field into a false agreement.
+func TestAbsent(t *testing.T) {
+	t.Parallel()
+	type named string
+	var nilMap map[string]int
+	var nilSlice []string
+	var nilPtr *float64
+	empty := ""
+
+	cases := []struct {
+		name string
+		v    any
+		want bool
+	}{
+		{name: "nil", v: nil, want: true},
+		{name: "empty_string", v: "", want: true},
+		{name: "blank_string", v: " \t\n ", want: true},
+		{name: "named_empty_string", v: named(""), want: true},
+		{name: "nil_pointer", v: nilPtr, want: true},
+		{name: "pointer_to_empty_string", v: &empty, want: true},
+		{name: "nil_map", v: nilMap, want: true},
+		{name: "empty_map", v: map[string]int{}, want: true},
+		{name: "nil_slice", v: nilSlice, want: true},
+		{name: "empty_array", v: [0]string{}, want: true},
+		{name: "zero_time", v: time.Time{}, want: true},
+		{name: "text", v: "x", want: false},
+		{name: "named_text", v: named("x"), want: false},
+		{name: "populated_map", v: map[string]int{"a": 1}, want: false},
+		{name: "populated_slice", v: []string{"a"}, want: false},
+		{name: "a_real_date", v: time.Date(2026, time.April, 3, 0, 0, 0, 0, time.UTC), want: false},
+		{name: "struct", v: struct{ A int }{}, want: false},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := absent(tc.v); got != tc.want {
+				t.Errorf("absent = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFoldFullCaseFolding pins the foldings that [strings.ToLower] gets wrong,
+// because they are the ones a German or Greek document depends on and the ones
+// nobody would notice were missing.
+func TestFoldFullCaseFolding(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		a, b string
+	}{
+		{name: "sharp_s", a: "ß", b: "ss"},
+		{name: "sharp_s_is_not_folded_when_case_matters", a: "ß", b: "ß"},
+		{name: "capital_sharp_s", a: "ẞ", b: "SS"},
+		{name: "final_sigma", a: "ς", b: "Σ"},
+		{name: "ypogegrammeni", a: "ͅ", b: "ι"},
+		{name: "armenian_ligature", a: "ﬓ", b: "մն"},
+		{name: "apostrophe_n", a: "ŉ", b: "ʼn"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if fold(tc.a, false) != fold(tc.b, false) {
+				t.Errorf("fold(%q) = %q, fold(%q) = %q, want them equal", tc.a, fold(tc.a, false), tc.b, fold(tc.b, false))
+			}
+		})
+	}
 }
