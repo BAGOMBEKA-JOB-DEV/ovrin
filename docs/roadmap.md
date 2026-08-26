@@ -152,11 +152,19 @@ from [ADR-0024](adr/0024-versioning-and-stability.md), and all four must hold.
 These are features, not conditions: shipping them does not open the gate, and
 the gate does not wait on them.
 
-- [ ] Batch processing, and streaming for documents that do not fit in memory
-- [ ] Circuit breaking in provider chains
-- [ ] Benchmarks published, per stage. Only `render/pdfium` has any today —
-      `make bench` runs them — and rasterising is the one stage whose cost was
-      already known to need watching
+- [x] **Batch processing** — `ExtractBatch` runs many sources at once, bounded
+      by `WithConcurrency`, in input order, with one document's failure
+      isolated to that document
+- [ ] **Streaming for documents that do not fit in memory** — deferred with its
+      reasons written down in
+      [ADR-0031](adr/0031-documents-are-read-whole.md). It is not a gate
+      condition, and it re-architects the three places where the resource
+      limits are enforced, which is not work to do before there is a corpus
+      that could tell you whether behaviour moved
+- [x] **Circuit breaking in provider chains** — `BreakOCR` and `BreakModel`, as
+      decorators rather than logic inside the chain
+      ([ADR-0018](adr/0018-fallback-is-a-decorator.md))
+- [ ] Benchmarks published, per stage
 
 ---
 

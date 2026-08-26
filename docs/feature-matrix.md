@@ -163,11 +163,12 @@ column here, and until then it does not.
 | `Explain` | ✅ | ✅ | ✅ | ✅ |
 | Two readings, cross-validation | ⛔ | ⛔ | ✅ | ✅ |
 | Provider fallback | ⛔ | ✅ | ✅ | ✅ |
-| Circuit breaking | ⛔ | ⛔ | ⛔ | ✅ |
+| Circuit breaking | ⛔ | ⛔ | ✅ | ✅ |
 | Hooks | ✅ | ✅ | ✅ | ✅ |
 | OpenTelemetry | ⛔ | ✅ | ✅ | ✅ |
 | Calibrated confidence | ⛔ | ⛔ | ⛔ | ✅ |
-| Batch, streaming large documents | ⛔ | ⛔ | ⛔ | ✅ |
+| Batch processing | ⛔ | ⛔ | ✅ | ✅ |
+| Streaming documents larger than memory | ⛔ | ⛔ | ⛔ | ⛔ deferred, [ADR-0031](adr/0031-documents-are-read-whole.md) |
 
 The ⚠️ in v0.1 provenance is the one to watch: page-level provenance is enough
 for grounding but not enough to highlight a region, so review interfaces built
