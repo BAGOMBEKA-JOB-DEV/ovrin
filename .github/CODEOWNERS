@@ -8,6 +8,8 @@
 # does not add a second reviewer today — it marks them so that when there is
 # one, the boundary is already drawn.
 
+/api/                   @BAGOMBEKA-JOB-DEV
+/scripts/check-docs.py  @BAGOMBEKA-JOB-DEV
 /docs/rules.md          @BAGOMBEKA-JOB-DEV
 /docs/adr/              @BAGOMBEKA-JOB-DEV
 /model.go               @BAGOMBEKA-JOB-DEV

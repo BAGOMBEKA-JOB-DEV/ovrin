@@ -52,6 +52,41 @@ prefix. Entries below say which module they affect where it is not the core.
   contributors, whose rules cite `docs/rules.md` section numbers so that a
   review comment can point at a line rather than an opinion.
 
+- **The documentation was reconciled against itself.** An audit before writing
+  any code found **27 contradictions** between documents, several of which made
+  the design unimplementable as written: `Extract`'s declared signature
+  disagreed with its own call sites, two error sentinels were used but never
+  defined, `ADR-0004` contradicted itself about whether `Result` is nil on
+  error, and fourteen types were referred to across the corpus without ever
+  being declared.
+
+  All twenty-seven are resolved. Four new decision records cover the ones that
+  changed the API: [ADR-0026](docs/adr/0026-extract-takes-per-call-options.md)
+  (`Extract` takes per-call options),
+  [ADR-0027](docs/adr/0027-twelve-sentinels-and-one-op-vocabulary.md) (a twelfth
+  sentinel, and one `Op` vocabulary shared by errors and events),
+  [ADR-0028](docs/adr/0028-reading-and-readingmode.md) (`Reading` and
+  `ReadingMode` are different types, so a `Provenance` cannot claim two
+  readings at once) and
+  [ADR-0029](docs/adr/0029-v01-scope-corrected.md) (the v0.1 scope, corrected —
+  nested structs, slices, `format`, `enum` and `Explain` move into the first
+  release, because the README's headline example uses them).
+
+- **`api/ovrin.txt`.** The public API surface as a sorted, machine-readable
+  contract in the format Go uses for its own `api/go1.N.txt`. Hand-authored for
+  now, which makes it the specification: once there is code, the generator is
+  red until the source matches it.
+
+- **`scripts/check-docs.py`.** Documentation integrity, run in CI and locally.
+  Resolves links **and their anchors**, checks that every `rules.md §N` and
+  `ADR-NNNN` citation points at something real, enforces ADR hygiene, verifies
+  that every ovrin symbol named in the docs exists in `api/ovrin.txt`, and compares the
+  two hand-maintained repository-layout trees against each other. It found five
+  problems on its first run, including two introduced minutes earlier.
+
+- **`docs/observability.md`.** The span and metric names `ovrin/otel` will
+  emit, treated as API. ADR-0021 promised this document existed; it did not.
+
 ### Notes
 
 - No release has been made. The install commands in the README will not work

@@ -30,74 +30,25 @@ env:
 
 jobs:
   # Runs today. Everything else is waiting for code.
+  #
+  # The checks live in scripts/check-docs.py rather than in heredocs here: five
+  # inline shell blocks in a workflow is the shape nobody can run locally and
+  # nobody maintains.
   docs:
     name: docs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - name: Every relative link resolves
-        run: |
-          python3 - <<'PY'
-          import os, re, sys
-          link = re.compile(r'\[[^\]]*\]\(([^)\s]+)\)')
-          bad = []
-          for root, dirs, fs in os.walk('.'):
-              dirs[:] = [d for d in dirs if d != '.git']
-              for f in fs:
-                  if not f.endswith('.md'):
-                      continue
-                  p = os.path.join(root, f)
-                  src = open(p).read()
-                  # Strip fenced and inline code: a snippet like `c.Extract[T](...)`
-                  # is not a link, and treating it as one produces noise nobody reads.
-                  src = re.sub(r'```.*?```', '', src, flags=re.S)
-                  src = re.sub(r'`[^`\n]*`', '', src)
-                  for m in link.finditer(src):
-                      t = m.group(1)
-                      if t.startswith(('http://', 'https://', 'mailto:', '#')):
-                          continue
-                      t = t.split('#')[0]
-                      if t and not os.path.exists(os.path.join(os.path.dirname(p), t)):
-                          bad.append((p, t))
-          for p, t in bad:
-              print(f"::error file={p}::broken link: {t}")
-          sys.exit(1 if bad else 0)
-          PY
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5
+        with:
+          python-version: "3.12"
 
-      - name: Code fences balance
-        run: |
-          fail=0
-          for f in $(find . -name '*.md' -not -path './.git/*'); do
-            n=$(grep -c '^```' "$f" || true)
-            if [ $((n % 2)) -ne 0 ]; then
-              echo "::error file=$f::unbalanced code fences ($n)"
-              fail=1
-            fi
-          done
-          exit $fail
-
-      - name: Every ADR is indexed, and every index row has a file
-        run: |
-          ls docs/adr/[0-9]*.md | sed -E 's#.*/([0-9]{4}).*#\1#' | sort > /tmp/have
-          grep -oE '^\| \[0[0-9]{3}\]' docs/adr/README.md \
-            | tr -d '|[] ' | sort > /tmp/listed
-          diff /tmp/have /tmp/listed || {
-            echo "::error::docs/adr/README.md index is out of sync"; exit 1; }
-
-      - name: Every ADR has all four sections and names a cost
-        run: |
-          fail=0
-          for f in docs/adr/[0-9]*.md; do
-            for s in '## Context' '## Decision' '## Consequences' '## Alternatives considered'; do
-              grep -q "^$s" "$f" || { echo "::error file=$f::missing $s"; fail=1; }
-            done
-            # docs/rules.md §9.4 — an ADR that lists no downsides has not
-            # finished thinking.
-            grep -q '\*\*Bad\.\*\*' "$f" || {
-              echo "::error file=$f::no downsides listed"; fail=1; }
-          done
-          exit $fail
+      # Link and anchor resolution, rules.md §N and ADR-NNNN citations, ADR
+      # hygiene, ovrin.X references against api/ovrin.txt, layout-tree
+      # agreement, and fence markers.
+      - name: check documentation
+        run: python3 scripts/check-docs.py
 
   build:
     name: build ${{ matrix.module }} @ go${{ matrix.go }}

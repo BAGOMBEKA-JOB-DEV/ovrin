@@ -13,14 +13,16 @@ gets built and in what order, see [`roadmap.md`](roadmap.md).
 
 | Artefact | State |
 |---|---|
-| Architecture decision records | 25, all Accepted |
+| Architecture decision records | **29**, all Accepted |
 | Pipeline specification | Complete — [`pipeline.md`](pipeline.md) |
 | Schema grammar | Complete — [`schema.md`](schema.md) |
 | Confidence model | Complete, weights provisional — [`confidence.md`](confidence.md) |
 | Threat model | Complete — [`threat-model.md`](threat-model.md) |
 | Engineering rules | Complete — [`rules.md`](rules.md) |
 | Community health files | Complete |
-| CI workflows | Written, not exercised — nothing to build yet |
+| CI workflows | The `docs` job runs and passes; the Go jobs wait for code |
+| Public API specification | `api/ovrin.txt`, hand-authored, 254 entries |
+| Documentation checks | `scripts/check-docs.py`, green |
 | Go source | **None** |
 | `go.mod` | **None** |
 | Evaluation corpus | **Empty** |
@@ -29,6 +31,15 @@ The design was written before the code deliberately. The alternative — buildin
 the pipeline and discovering during implementation that confidence cannot come
 from logprobs, or that the seam has to own prompt construction for the security
 property to hold — would have produced a worse design and a rewrite.
+
+That approach has a cost, and it has now been paid once. An audit before writing
+code found **27 contradictions** between documents — `Extract`'s signature
+against its own call sites, sentinels used but never defined, fourteen types
+referred to but never declared. All are resolved, four of them by new decision
+records ([ADR-0026](adr/0026-extract-takes-per-call-options.md) through
+[ADR-0029](adr/0029-v01-scope-corrected.md)). The lesson is in
+`scripts/check-docs.py`: prose that nothing checks will drift, so now something
+checks it.
 
 ---
 
