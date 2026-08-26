@@ -2,7 +2,10 @@ package ovrin
 
 import (
 	"context"
+	"reflect"
 	"runtime"
+
+	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
 )
 
 // Option configures a [Client], or a single [Extract] call.
@@ -101,7 +104,8 @@ const (
 // trusted internal documents and untrusted public uploads should hold two,
 // with different limits.
 type Client struct {
-	cfg config
+	cfg   config
+	cache schema.Cache
 }
 
 // New returns a Client configured by opts.
@@ -122,13 +126,27 @@ func New(opts ...Option) *Client {
 	return &Client{cfg: cfg}
 }
 
+// providerOption marks the options that configure a provider or a resource
+// built once. They are meaningful on New and meaningless on a single Extract
+// call, and being refused there is better than being silently ignored
+// (docs/rules.md §6.1).
+type providerOption interface {
+	Option
+	isProviderOption()
+}
+
+type providerOptionFunc func(*config)
+
+func (f providerOptionFunc) apply(c *config) { f(c) }
+func (providerOptionFunc) isProviderOption() {}
+
 // WithModel sets the model that turns document content into structured JSON.
 // Required.
 func WithModel(m Model) Option {
 	if m == nil {
 		panic("ovrin: WithModel called with a nil Model")
 	}
-	return optionFunc(func(c *config) { c.model = m })
+	return providerOptionFunc(func(c *config) { c.model = m })
 }
 
 // WithOCR sets the provider used for pages with no usable text layer.
@@ -139,7 +157,7 @@ func WithOCR(o OCR) Option {
 	if o == nil {
 		panic("ovrin: WithOCR called with a nil OCR")
 	}
-	return optionFunc(func(c *config) { c.ocr = o })
+	return providerOptionFunc(func(c *config) { c.ocr = o })
 }
 
 // WithRenderer sets the renderer used to rasterise pages for OCR.
@@ -150,7 +168,7 @@ func WithRenderer(r Renderer) Option {
 	if r == nil {
 		panic("ovrin: WithRenderer called with a nil Renderer")
 	}
-	return optionFunc(func(c *config) { c.renderer = r })
+	return providerOptionFunc(func(c *config) { c.renderer = r })
 }
 
 // WithScorer replaces the confidence scorer.
@@ -173,7 +191,7 @@ func WithHook(h Hook) Option {
 	if h == nil {
 		panic("ovrin: WithHook called with a nil Hook")
 	}
-	return optionFunc(func(c *config) { c.hook = h })
+	return providerOptionFunc(func(c *config) { c.hook = h })
 }
 
 // WithReading selects how a document is read.
@@ -217,9 +235,58 @@ func WithDateOrder(d DateOrder) Option {
 //	}
 //	return ledger.Post(res.Data)
 func Extract[T any](ctx context.Context, c *Client, src Source, opts ...Option) (*Result[T], error) {
-	_ = ctx
-	_ = c
-	_ = src
-	_ = opts
-	panic("ovrin: Extract is not implemented yet")
+	if c == nil {
+		return nil, &Error{Op: OpUnknown, Kind: ErrNoProvider, Message: "the Client is nil; build one with New"}
+	}
+
+	// Copy, then overlay. The Client is never mutated, so two extractions
+	// running concurrently with different options cannot interfere.
+	cfg := c.cfg
+	for _, o := range opts {
+		if o == nil {
+			continue
+		}
+		if _, ok := o.(providerOption); ok {
+			return nil, &Error{
+				Op:      OpUnknown,
+				Kind:    ErrBadRequest,
+				Message: "provider options configure a Client and cannot be passed to Extract",
+			}
+		}
+		o.apply(&cfg)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, (&Error{Op: OpUnknown, Kind: ErrUnavailable,
+			Message: "the context had already ended"}).WithCause(err)
+	}
+
+	// Reflection happens before a provider is contacted, so a malformed tag
+	// costs nothing at all.
+	sch, err := c.schema(reflect.TypeOf((*T)(nil)).Elem())
+	if err != nil {
+		return nil, classify(OpSchema, "", err)
+	}
+
+	out, err := run(ctx, &cfg, src, sch)
+	if err != nil {
+		// A returned error means nothing usable came back, so there is no
+		// Result to return alongside it (ADR-0004).
+		return nil, err
+	}
+
+	res := assemble[T](out, sch, &cfg)
+	cfg.emit(ctx, Event{
+		Op: OpScore, Fields: len(res.Fields), Pages: res.Metadata.Pages,
+		Usage: res.Metadata.Usage, Confidence: res.Confidence,
+		Review: res.NeedsReview, Duration: res.Metadata.Duration,
+	})
+	return res, nil
+}
+
+// schema reflects T once per Client per type. Reflection is not cheap and an
+// application extracting the same type ten thousand times should pay for it
+// once.
+func (c *Client) schema(t reflect.Type) (*schema.Schema, error) {
+	return c.cache.Of(t)
 }

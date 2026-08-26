@@ -40,9 +40,9 @@ func TestCanonical(t *testing.T) {
 		{"combining acute on capital composes", "É", "É"},
 		{"vietnamese two marks compose in order", "ế", "ế"},
 		{"cyrillic breve composes", "й", "й"},
-		{"zero width space is kept", "a​b", "a​b"},
-		{"soft hyphen is kept", "a­b", "a­b"},
-		{"bidi override is kept", "a‮b", "a‮b"},
+		{"zero width space is kept", "a\u200bb", "a\u200bb"},
+		{"soft hyphen is kept", "a\u00adb", "a\u00adb"},
+		{"bidi override is kept", "a\u202eb", "a\u202eb"},
 		{"unknown code point passes through", "中文", "中文"},
 		{"halfwidth katakana is left alone", "ｶﾞ", "ｶﾞ"},
 		{"hangul is left alone", "가", "가"},
@@ -156,7 +156,7 @@ func TestCanonicalIsIdempotent(t *testing.T) {
 	inputs := []string{
 		"Invoice 42", "ofﬁce", "２５，０００",
 		"é", "a  b", "①②", "\U0001D408\U0001D420", "½",
-		"a​b", "中文", "ｶﾞ",
+		"a\u200bb", "中文", "ｶﾞ",
 	}
 	for _, in := range inputs {
 		in := in

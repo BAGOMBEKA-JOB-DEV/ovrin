@@ -140,7 +140,8 @@ image, plus cloud OCR providers that accept a PDF directly.
 // Client holds the providers, limits and policy an extraction runs under.
 // It is built once and shared; every method is safe for concurrent use.
 type Client struct {
-	cfg config
+	cfg   config
+	cache schema.Cache
 }
 
 // Option configures a Client, or one Extract call. See ADR-0026.

@@ -179,6 +179,43 @@ func TestDocumentedDefaults(t *testing.T) {
 		}
 	})
 
+	// The weights and floors were shape-checked only while the scorer did not
+	// exist. It exists now, so they are bound to the constants the same way the
+	// limits are: the compiler proves the constant is there, and this proves
+	// the number in the document is the number the scorer uses.
+	// The weights were shape-checked only while the scorer did not exist. It
+	// exists now, so they bind to its constants the same way the limits do:
+	// the compiler proves the constant is there, and this proves the number in
+	// the document is the number the scorer actually uses.
+	t.Run("the documented weights are the scorer's weights", func(t *testing.T) {
+		t.Parallel()
+		bridge := map[string]float64{
+			SignalGrounding:  WeightGrounding,
+			SignalAgreement:  WeightAgreement,
+			SignalOCR:        WeightOCR,
+			SignalSchema:     WeightSchema,
+			SignalFormat:     WeightFormat,
+			SignalCrossField: WeightCrossField,
+		}
+		for _, r := range namedTable(t, "docs/confidence.md", []string{"Signal", "Weight"}) {
+			name := strings.Trim(cleanCell(r.cells[0]), "`")
+			want, ok := bridge[name]
+			if !ok {
+				t.Errorf("%s:%d: the weights table names %q, which the scorer has no constant for",
+					r.file, r.line, name)
+				continue
+			}
+			got, _, ok := documentedValue(r.cells[1])
+			if !ok {
+				continue // the sum check below reports an unparseable weight
+			}
+			if math.Round(got*100) != math.Round(want*100) {
+				t.Errorf("%s:%d: docs/confidence.md gives %q a weight of %v, the scorer uses %v",
+					r.file, r.line, name, got, want)
+			}
+		}
+	})
+
 	t.Run("the confidence weights sum to 1.00", func(t *testing.T) {
 		weights := namedTable(t, "docs/confidence.md", []string{"Signal", "Weight"})
 		if len(weights) != len(confidenceWeights) {

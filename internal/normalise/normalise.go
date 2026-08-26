@@ -230,7 +230,7 @@ func (bd *builder) run(pg, wi, li int, box *Rect, text string, suppressLead bool
 			for j < len(us) && us[j].space {
 				j++
 			}
-			if !bd.atBreak() && !(suppressLead && i == 0) {
+			if !bd.atBreak() && (!suppressLead || i != 0) {
 				start := len(bd.b)
 				bd.b = append(bd.b, ' ')
 				bd.push(Segment{

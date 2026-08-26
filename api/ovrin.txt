@@ -10,6 +10,10 @@
 # the generator is red until the source matches it. See ADR-0024 for what
 # happens to this file at v1.0.
 #
+pkg ovrin, const CapDisagreement float64
+pkg ovrin, const CapRuleFailed float64
+pkg ovrin, const CapSuspicious float64
+pkg ovrin, const CapUngrounded float64
 pkg ovrin, const DateOrderUnknown DateOrder
 pkg ovrin, const DayFirst DateOrder
 pkg ovrin, const DefaultMaxDecompressedBytes int64
@@ -61,6 +65,12 @@ pkg ovrin, const SignalFormat string
 pkg ovrin, const SignalGrounding string
 pkg ovrin, const SignalOCR string
 pkg ovrin, const SignalSchema string
+pkg ovrin, const WeightAgreement float64
+pkg ovrin, const WeightCrossField float64
+pkg ovrin, const WeightFormat float64
+pkg ovrin, const WeightGrounding float64
+pkg ovrin, const WeightOCR float64
+pkg ovrin, const WeightSchema float64
 pkg ovrin, const YearFirst DateOrder
 pkg ovrin, func Bytes([]byte) Source
 pkg ovrin, func Extract[T any](context.Context, *Client, Source, ...Option) (*Result[T], error)

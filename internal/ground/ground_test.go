@@ -234,15 +234,15 @@ func TestGroundStrings(t *testing.T) {
 // characters and normalisation still reports them.
 func TestGroundFindsThroughHiddenCharacters(t *testing.T) {
 	t.Parallel()
-	doc := page("Vendor AC​ME Ltd")
+	doc := page("Vendor AC\u200bME Ltd")
 	r := Ground(doc, "ACME", KindString)
 	if r.Grounding != Normalised {
 		t.Fatalf("grounding = %v, want %v", r.Grounding, Normalised)
 	}
-	if got := matched(doc, r); got != "AC​ME" {
+	if got := matched(doc, r); got != "AC\u200bME" {
 		t.Errorf("matched %q, want the zero-width character to be inside the span", got)
 	}
-	if !strings.Contains(doc.Text, "​") {
+	if !strings.Contains(doc.Text, "\u200b") {
 		t.Error("the zero-width character was stripped from the text")
 	}
 }
@@ -497,7 +497,7 @@ func TestFoldMapsBackToTheSource(t *testing.T) {
 	t.Parallel()
 	cases := []string{
 		"", "plain", "ACME  Ltd", "Ofﬁce", "Bäcker", "STRASSE", "ß",
-		"a​b", "２５，０００", "a\xffb", "中文", "É",
+		"a\u200bb", "２５，０００", "a\xffb", "中文", "É",
 	}
 	for _, src := range cases {
 		src := src

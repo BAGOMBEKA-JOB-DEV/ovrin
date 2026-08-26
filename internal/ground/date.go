@@ -219,12 +219,15 @@ func numericDate(toks []tok, i int, order DateOrder) (dateHit, int, bool) {
 // March 2026".
 func dayMonthYear(toks []tok, i int) (dateHit, int, bool) {
 	j := i
-	day, ok := 0, false
+	var day int
 	if j < len(toks) && toks[j].kind == tokDigits && len(toks[j].s) <= 2 {
-		day, ok = atoi(toks[j].s), true
+		day = atoi(toks[j].s)
 		j++
 		j = skipOrdinalSuffix(toks, j)
 	} else {
+		// ok is only meaningful here: the digit branch cannot fail, and the
+		// word branch returns rather than falling through.
+		var ok bool
 		if day, j, ok = ordinalWords(toks, j); !ok {
 			return dateHit{}, i, false
 		}

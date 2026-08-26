@@ -734,7 +734,17 @@ func (s ModelSuite) testNoGoroutineLeak(t *testing.T) {
 	m, _ := s.serve(t, http.StatusOK, s.SuccessBody)
 
 	blocked := make(chan struct{})
+	// entered is signalled as each request reaches the handler, so the warm-up
+	// below can wait for a connection to genuinely exist before abandoning it.
+	// Cancelling on a race instead left the baseline missing net/http's
+	// per-connection goroutines, and this test then reported them as the
+	// adapter's leak roughly one run in three.
+	entered := make(chan struct{}, 16)
 	hung := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
 		select {
 		case <-r.Context().Done():
 		case <-blocked:
@@ -752,8 +762,20 @@ func (s ModelSuite) testNoGoroutineLeak(t *testing.T) {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	warmCtx, warmCancel := context.WithCancel(context.Background())
-	go warmCancel()
-	_, _ = hungModel.Generate(warmCtx, s.request()) //nolint:errcheck // warm-up only
+	warmDone := make(chan struct{})
+	go func() {
+		defer close(warmDone)
+		_, _ = hungModel.Generate(warmCtx, s.request()) //nolint:errcheck // warm-up only
+	}()
+	select {
+	case <-entered:
+		// The connection exists; abandoning it now exercises the same path the
+		// measured loop does, and its goroutines are in the baseline.
+	case <-time.After(5 * time.Second):
+		t.Fatal("the hung server was never reached during warm-up")
+	}
+	warmCancel()
+	<-warmDone
 
 	defer checkNoGoroutineLeaks(t)()
 
