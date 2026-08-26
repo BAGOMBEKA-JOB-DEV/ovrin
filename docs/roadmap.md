@@ -110,11 +110,15 @@ cross-validation (v0.3), provider fallback chains (v0.2), local rasterising
       but not highlighted on a page
 - [x] Multi-page documents with per-page acquisition paths — a digital
       contract with a scanned appendix reads each page by its own path
-- [x] Layout preservation — `Recognition.Layout` carries tables and key-value
-      regions across the OCR seam; see the note on
-      [ADR-0009](adr/0009-ocr-seam.md), which this reverses a cost of.
-      Columns are **not** preserved: the two cloud text-detection APIs report
-      no column structure, and a two-column page can still interleave
+- [x] Layout preservation — `ocr/azure` fills `Recognition.Layout` when asked
+      for a layout model, and `internal/prompt` renders the tables into the page
+      the model reads, inside the untrusted-content boundary like every other
+      thing the document said. See the follow-up on
+      [ADR-0009](adr/0009-ocr-seam.md), whose accepted cost this reverses.
+      Two things it does not do: key-value pairs cross the seam and are not yet
+      rendered, and columns are **not** preserved — the cloud text-detection
+      APIs report no column structure, so a two-column page can still
+      interleave
 - [x] Two readings and cross-validation
       ([ADR-0014](adr/0014-cross-validation.md))
 - [x] Extraction retry on schema-invalid output — once, and only for a reply

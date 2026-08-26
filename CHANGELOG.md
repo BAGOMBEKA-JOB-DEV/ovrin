@@ -168,7 +168,7 @@ prefix. Entries below say which module they affect where it is not the core.
   the rule, which is rule §8.5's cardinal sin. A second reply that is no better
   than the first is discarded. `Metadata.Retried` reports whether it happened.
 
-- **`Recognition.Layout`.** Tables and key-value pairs now cross the OCR seam
+- **`Recognition.Layout`.** Tables and key-value pairs cross the OCR seam
   in a normalised form — `Layout`, `Table`, `Cell`, `Pair`, `Region`, `Ref` and
   `CellKind` — instead of being discarded into `Raw`. The field is a pointer
   because an empty layout and no layout are different facts: a provider that
