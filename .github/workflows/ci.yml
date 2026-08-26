@@ -38,20 +38,32 @@ jobs:
 
       - name: Every relative link resolves
         run: |
-          fail=0
-          while IFS= read -r line; do
-            f="${line%%:*}"; l="${line#*:}"
-            case "$l" in http*|mailto:*|"#"*) continue ;; esac
-            t="${l%%#*}"
-            [ -z "$t" ] && continue
-            d="$(dirname "$f")"
-            if [ ! -e "$d/$t" ]; then
-              echo "::error file=$f::broken link: $t"
-              fail=1
-            fi
-          done <<< "$(grep -rHoE '\]\([^)]+\)' --include='*.md' . \
-                     | sed -E 's/\]\((.*)\)$/:\1/')"
-          exit $fail
+          python3 - <<'PY'
+          import os, re, sys
+          link = re.compile(r'\[[^\]]*\]\(([^)\s]+)\)')
+          bad = []
+          for root, dirs, fs in os.walk('.'):
+              dirs[:] = [d for d in dirs if d != '.git']
+              for f in fs:
+                  if not f.endswith('.md'):
+                      continue
+                  p = os.path.join(root, f)
+                  src = open(p).read()
+                  # Strip fenced and inline code: a snippet like `c.Extract[T](...)`
+                  # is not a link, and treating it as one produces noise nobody reads.
+                  src = re.sub(r'```.*?```', '', src, flags=re.S)
+                  src = re.sub(r'`[^`\n]*`', '', src)
+                  for m in link.finditer(src):
+                      t = m.group(1)
+                      if t.startswith(('http://', 'https://', 'mailto:', '#')):
+                          continue
+                      t = t.split('#')[0]
+                      if t and not os.path.exists(os.path.join(os.path.dirname(p), t)):
+                          bad.append((p, t))
+          for p, t in bad:
+              print(f"::error file={p}::broken link: {t}")
+          sys.exit(1 if bad else 0)
+          PY
 
       - name: Code fences balance
         run: |
