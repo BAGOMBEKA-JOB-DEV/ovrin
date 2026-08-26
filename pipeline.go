@@ -63,6 +63,26 @@ func run(ctx context.Context, cfg *config, src Source, sch *schema.Schema) (*out
 	if err != nil {
 		return nil, err
 	}
+
+	// ModeBoth takes a second, independent reading. Two readings fail in
+	// uncorrelated ways — OCR misreads glyphs, a model misassigns fields — so
+	// when they agree they are probably both right, and when they differ at
+	// least one is definitely wrong and we know which field
+	// (ADR-0014). It roughly doubles cost, which is why it is asked for
+	// rather than assumed.
+	var second *reading
+	if cfg.reading == ModeBoth {
+		second, err = stageSecondReading(ctx, cfg, data, doc, rd, &meta)
+		if err != nil {
+			// A second reading that cannot be taken is not a failure: the
+			// first one stands, and the agreement signal is simply absent
+			// rather than zero. Refusing the whole extraction because a
+			// second opinion was unavailable would be worse than the single
+			// opinion the caller would otherwise have had.
+			cfg.emit(ctx, Event{Op: OpAcquire, Err: err})
+			second = nil
+		}
+	}
 	meta.Readings = rd.kinds
 	meta.Pages = rd.doc.Pages
 
@@ -98,6 +118,19 @@ func run(ctx context.Context, cfg *config, src Source, sch *schema.Schema) (*out
 		}
 	}
 
+	// The second reading goes through the same prompt, schema and model. Only
+	// the content differs, which is the point: two readings of one document,
+	// compared field by field.
+	var secondObject map[string]any
+	if second != nil {
+		if obj, err := generateFrom(ctx, cfg, sch, jsonSchema, second, &meta); err == nil {
+			secondObject = obj
+			meta.Readings = append(meta.Readings, second.kinds...)
+		} else {
+			cfg.emit(ctx, Event{Op: OpGenerate, Err: err})
+		}
+	}
+
 	meta.Kind = rd.doc.Kind
 	meta.Duration = time.Since(started)
 
@@ -108,7 +141,14 @@ func run(ctx context.Context, cfg *config, src Source, sch *schema.Schema) (*out
 		provider: rd.provider,
 		findings: findingsOf(rd.text),
 		unread:   rd.unread,
-		meta:     meta,
+		second:   secondObject,
+		secondReading: func() Reading {
+			if second == nil {
+				return ReadingUnknown
+			}
+			return primaryReading(second.kinds)
+		}(),
+		meta: meta,
 	}, nil
 }
 
@@ -122,7 +162,13 @@ type outcome struct {
 	provider string
 	findings []normalise.Finding
 	unread   []int
-	meta     Metadata
+
+	// second is the reply from a second, independent reading, and is nil
+	// unless ModeBoth was asked for. secondReading names which reading it was.
+	second        map[string]any
+	secondReading Reading
+
+	meta Metadata
 }
 
 func stageDetect(ctx context.Context, cfg *config, src Source, meta *Metadata) ([]byte, Document, error) {
@@ -386,6 +432,106 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 		pages:  content,
 		unread: unread,
 	}, nil
+}
+
+// stageSecondReading takes an independent second reading of the same document.
+//
+// It deliberately picks a reading the first one did not use: comparing two OCR
+// passes over the same pixels would agree with itself, which is agreement that
+// proves nothing. Text against vision, or OCR against vision, fail in ways that
+// have nothing to do with each other, and that independence is the whole
+// source of the signal (ADR-0014).
+func stageSecondReading(ctx context.Context, cfg *config, data []byte, doc Document, first *reading, meta *Metadata) (*reading, error) {
+	start := time.Now()
+	took := primaryReading(first.kinds)
+
+	// Vision is the reading almost nothing else uses, so it is the usual
+	// second opinion. When the first reading was already vision, OCR is the
+	// alternative, and without an OCR provider there is no second reading to
+	// take.
+	if took == ReadingVision {
+		if cfg.ocr == nil {
+			return nil, &Error{Op: OpAcquire, Kind: ErrNoProvider,
+				Message: "a second reading needs an OCR provider; configure one with WithOCR"}
+		}
+		alt := *cfg
+		alt.reading = ModeOCR
+		return stageAcquire(ctx, &alt, data, doc, meta)
+	}
+
+	pages, err := visionPages(ctx, cfg, doc, first)
+	if err != nil {
+		return nil, err
+	}
+	cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Pages: len(pages)})
+
+	kinds := make([]Reading, len(pages))
+	for i := range kinds {
+		kinds[i] = ReadingVision
+	}
+	return &reading{doc: first.doc, kinds: kinds, pages: pages}, nil
+}
+
+// visionPages renders each page so a vision model can read it.
+func visionPages(ctx context.Context, cfg *config, doc Document, first *reading) ([]prompt.PageContent, error) {
+	// An image source is already an image: it needs no renderer, and sending
+	// the original bytes is better than rendering our own copy of them.
+	if doc.Kind != KindPDF {
+		return []prompt.PageContent{{
+			Number:    1,
+			Reading:   prompt.Reading(ReadingVision),
+			Image:     doc.Data,
+			MediaType: mediaTypeOf(doc.Kind),
+		}}, nil
+	}
+	if cfg.renderer == nil {
+		return nil, &Error{Op: OpAcquire, Kind: ErrNoProvider,
+			Message: "a vision reading of a PDF needs a renderer; configure one with WithRenderer"}
+	}
+
+	n := len(first.pages)
+	if n == 0 {
+		n = 1
+	}
+	out := make([]prompt.PageContent, 0, n)
+	for i := 1; i <= n; i++ {
+		img, err := cfg.renderer.Render(ctx, doc, i, renderDPI)
+		if err != nil {
+			return nil, classify(OpRender, "", err)
+		}
+		b, err := encodePNG(img)
+		if err != nil {
+			return nil, &Error{Op: OpRender, Page: i, Kind: ErrInternal,
+				Message: "the rendered page could not be encoded"}
+		}
+		out = append(out, prompt.PageContent{
+			Number: i, Reading: prompt.Reading(ReadingVision),
+			Image: b, MediaType: "image/png",
+		})
+	}
+	return out, nil
+}
+
+// generateFrom runs the prompt and model stages over one reading's content.
+func generateFrom(ctx context.Context, cfg *config, sch *schema.Schema, jsonSchema []byte, rd *reading, meta *Metadata) (map[string]any, error) {
+	req, err := stagePrompt(ctx, cfg, sch, jsonSchema, rd)
+	if err != nil {
+		return nil, err
+	}
+	raw, usage, err := stageGenerate(ctx, cfg, req, meta)
+	if err != nil {
+		return nil, err
+	}
+	meta.Usage.InputTokens += usage.InputTokens
+	meta.Usage.OutputTokens += usage.OutputTokens
+	meta.Usage.PageUnits += usage.PageUnits
+
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, &Error{Op: OpGenerate, Kind: ErrBadResponse,
+			Message: "the reply is not a JSON object"}
+	}
+	return obj, nil
 }
 
 // acquirePage reads one page of a document the text layer could not serve.
