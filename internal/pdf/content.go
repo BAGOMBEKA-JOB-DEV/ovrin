@@ -425,7 +425,7 @@ func (ip *interp) do(op operator, ops []Object, res Dict, l *lexer, dp detect.De
 		// Its extent is still recorded: an inline image is drawn in the unit
 		// square like any other, and one covering the page is a background
 		// this package cannot name.
-		ip.opaquePaint(ip.ctmBox(unitSquare))
+		ip.opaquePaintSolid(ip.ctmBox(unitSquare))
 		skipInlineImage(l)
 	default:
 		// The path, painting, clipping and shading operators. They are in
@@ -620,7 +620,7 @@ func (ip *interp) doXObject(n Name, res Dict, dp detect.Depth) {
 		// most of these are in filters this package refuses. Its extent is
 		// cheap and is what says whether the paper underneath a word is
 		// something this package can name.
-		ip.opaquePaint(ip.ctmBox(unitSquare))
+		ip.opaquePaintSolid(ip.ctmBox(unitSquare))
 		return
 	}
 	if kind != "Form" {

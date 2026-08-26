@@ -391,8 +391,12 @@ func TestPageBackground(t *testing.T) {
 			// covered at all. Answering "unknown" suppresses the check, which
 			// is the safe direction — a false positive costs an operator's
 			// attention (ADR-0017, "Bad").
+			// Sized so the diamond swallows the page whole. A square exactly
+			// the size of the page would sit on the threshold — its area is
+			// precisely half its bounding box — and a test decided by
+			// floating-point noise measures nothing.
 			name:    "a 45-degree rotated fill is not a rectangle any more",
-			content: "q 0.7071 0.7071 -0.7071 0.7071 306 0 cm 1 0 0 rg 0 0 792 792 re f Q" + text,
+			content: "q 0.7071 0.7071 -0.7071 0.7071 306 -900 cm 1 0 0 rg 0 0 1800 1800 re f Q" + text,
 			known:   false,
 		},
 		{

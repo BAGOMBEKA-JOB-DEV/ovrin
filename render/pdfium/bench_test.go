@@ -27,16 +27,25 @@ func benchDoc(b *testing.B) ovrin.Document {
 // It is reported separately because it is the cost that most surprises people:
 // a service that renders one page per request pays it once, a CLI that renders
 // one page pays it every time.
+// It is measured per instance count as well, because each instance is its own
+// Wazero runtime: the compiled code is cached and shared, so the second and
+// later runtimes should cost far less than the first, and this is where that
+// claim is checked.
 func BenchmarkStartup(b *testing.B) {
 	doc := benchDoc(b)
-	for i := 0; i < b.N; i++ {
-		r := pdfium.New(pdfium.WithInstances(1))
-		if _, err := r.Render(context.Background(), doc, 1, 150); err != nil {
-			b.Fatalf("Render: %v", err)
-		}
-		if err := r.Close(); err != nil {
-			b.Fatalf("Close: %v", err)
-		}
+	for _, n := range []int{1, 2, 4, 8} {
+		n := n
+		b.Run(instanceName(n), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				r := pdfium.New(pdfium.WithInstances(n))
+				if _, err := r.Render(context.Background(), doc, 1, 150); err != nil {
+					b.Fatalf("Render: %v", err)
+				}
+				if err := r.Close(); err != nil {
+					b.Fatalf("Close: %v", err)
+				}
+			}
+		})
 	}
 }
 
@@ -76,7 +85,8 @@ func BenchmarkRenderParallel(b *testing.B) {
 				b.Fatalf("warming: %v", err)
 			}
 			b.ResetTimer()
-			b.SetParallelism(n)
+			// Parallelism is left at GOMAXPROCS goroutines for every case, so
+			// the only thing varying is how many of them can render at once.
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
 					if _, err := r.Render(context.Background(), doc, 1, 300); err != nil {

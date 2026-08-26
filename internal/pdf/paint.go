@@ -149,10 +149,14 @@ func (ip *interp) pathPoint(x, y float64) {
 // than it is, so it contributes its corners to the box and forfeits the
 // exactness that lets a fill be taken for the background.
 func (ip *interp) pathRect(x, y, w, h float64) {
+	// Perimeter order, not opposite corners. A bounding box does not care, but
+	// the shoelace sum does: walking (x,y) → (x+w,y) → (x,y+h) → (x+w,y+h)
+	// traces a figure-eight whose two triangles cancel to nothing, and the
+	// rectangle would measure as having no area at all.
 	ip.pathPoint(x, y)
 	ip.pathPoint(x+w, y)
-	ip.pathPoint(x, y+h)
 	ip.pathPoint(x+w, y+h)
+	ip.pathPoint(x, y+h)
 	// A quarter turn maps an axis-aligned rectangle onto an axis-aligned
 	// rectangle, so requiring b and c to be zero rejects a page that is
 	// genuinely covered. Either the diagonal or the anti-diagonal is enough;
@@ -162,7 +166,21 @@ func (ip *interp) pathRect(x, y, w, h float64) {
 	diagonal := m[1] == 0 && m[2] == 0
 	quarterTurn := m[0] == 0 && m[3] == 0
 	if !diagonal && !quarterTurn {
+		// Not a rectangle in device space any more, so it cannot be measured
+		// as one. It is still ink, though: returning here left the path with
+		// no bounding box at all, so a page-swallowing rotated fill recorded
+		// nothing and the page fell through to the bare-white-paper default —
+		// reporting white for a page covered in red.
+		//
+		// Walking the four corners records the true area through the shoelace
+		// sum rather than the bounding box's over-estimate, which is what
+		// stops a diagonal hairline being mistaken for paper.
 		ip.path.rectsOnly = false
+		ip.pathPoint(x, y)
+		ip.pathPoint(x+w, y)
+		ip.pathPoint(x+w, y+h)
+		ip.pathPoint(x, y+h)
+		ip.pathPoint(x, y)
 		return
 	}
 	ax, ay := ip.gs.ctm.apply(x, y)
@@ -227,7 +245,7 @@ func (ip *interp) fillPath() {
 		ip.bgUnknown = true
 		return
 	}
-	ip.opaquePaint(ip.path.bbox)
+	ip.opaquePaintPath()
 }
 
 // opaquePaint records paint whose colour was not taken.
@@ -238,58 +256,57 @@ func (ip *interp) fillPath() {
 // answering "unknown" — the answer that suppresses the check rather than the
 // one that fires it (docs/adr/0017, "Bad": a false positive costs an
 // operator's attention).
-func (ip *interp) opaquePaint(r rect) {
+// opaquePaintPath records the current traced path, measured by its ink.
+func (ip *interp) opaquePaintPath() {
+	ip.opaquePaint(ip.path.bbox, ip.inkArea())
+}
+
+// opaquePaintSolid records a rectangle that is solid by construction — an
+// image, a shading, a form's bounding box. There is no outline to measure: the
+// box is the shape.
+func (ip *interp) opaquePaintSolid(r rect) {
+	ip.opaquePaint(r, r.area())
+}
+
+func (ip *interp) opaquePaint(r rect, ink float64) {
 	if ip.chars > 0 {
 		return
 	}
 	// Clipping is what the ink can actually reach. A full-page fill clipped to
 	// a corner paints the corner, and charging it for the page made this
-	// package answer "unknown" for a document with a hundred-point swatch on
-	// it.
+	// package answer "unknown" for a document with a swatch on it.
 	visible := r.intersect(ip.gs.clip).intersect(ip.page)
 	if visible.area() <= 0 {
 		return
 	}
-	if visible.covers(ip.page) && ip.pathFillsItsBox() {
+
+	if ink <= 0 {
+		return
+	}
+	// Compare the ink to the PAGE, never to the path's own bounding box. A
+	// rotated square is exactly half its bounding box whatever its size, so any
+	// ratio against the box sits on a knife edge and is decided by rounding —
+	// a hairline and a page-swallowing diamond would land on the same answer.
+	// Against the page they are three orders of magnitude apart.
+	if visible.covers(ip.page) && ink >= ip.page.area() {
 		ip.bgUnknown = true
 		return
 	}
-	ip.painted += ip.coveredArea(visible)
+	ip.painted += min2(ink, visible.area())
 }
 
-// pathFillsItsBox reports whether the path is dense enough in its own bounding
-// box for that box to stand for the ink.
+// inkArea is the area the current path actually covers, as opposed to the area
+// of the box around it.
 //
-// A rectangle fills its box exactly. A diagonal hairline fills almost none of
-// it, and treating the box as ink is what made a line across the page read as
-// a painted page.
-func (ip *interp) pathFillsItsBox() bool {
-	box := ip.path.bbox.area()
-	if box <= 0 {
-		return true // a degenerate box cannot overstate anything
-	}
-	return ip.coveredArea(ip.path.bbox) >= coverFraction*box
-}
-
-// coveredArea is the ink the current path lays down inside r.
-//
-// For a path made only of rectangles the rectangles' own area is exact. For
-// anything else the shoelace area of the outline is used, scaled by how much of
-// the bounding box r represents, since the ink is not distributed evenly and no
-// cheaper estimate is honest.
-func (ip *interp) coveredArea(r rect) float64 {
+// Rectangles report their own area exactly. Everything else is measured by the
+// shoelace formula over the outline, which is what separates a diagonal
+// hairline — a page-sized bounding box holding a few hundred square points of
+// ink — from a fill that genuinely covers the paper.
+func (ip *interp) inkArea() float64 {
 	if ip.path.rectsOnly && ip.path.rectArea > 0 {
-		return min2(ip.path.rectArea, r.area())
+		return ip.path.rectArea
 	}
-	area := ip.path.shoelaceArea()
-	if area <= 0 {
-		return 0
-	}
-	box := ip.path.bbox.area()
-	if box <= 0 {
-		return min2(area, r.area())
-	}
-	return min2(area*r.area()/box, r.area())
+	return ip.path.shoelaceArea()
 }
 
 // shoelaceArea closes the last subpath and returns the unsigned area.
@@ -384,7 +401,7 @@ func (ip *interp) paint(op operator, ops []Object) bool {
 		// A shading paints the whole clip region in colours that vary across
 		// it, so there is no single colour to take. Wherever it lands, the
 		// paper under it is not something this package can name.
-		ip.opaquePaint(ip.gs.clip)
+		ip.opaquePaintSolid(ip.gs.clip)
 	default:
 		return false
 	}
