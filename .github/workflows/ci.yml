@@ -38,7 +38,7 @@ jobs:
     name: docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5
         with:
@@ -65,7 +65,7 @@ jobs:
           - { module: ".", go: "1.22" }
           - { module: ".", go: "1.27", cover: true, floor: 85 }
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
         with:
@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     if: hashFiles('go.mod') != ''
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
         with: { go-version: "${{ env.GO_VERSION }}" }
       - run: |
@@ -134,7 +134,7 @@ jobs:
     runs-on: ubuntu-latest
     if: hashFiles('go.mod') != ''
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
         with: { go-version: "${{ env.GO_VERSION }}" }
 
@@ -163,7 +163,7 @@ jobs:
     runs-on: ubuntu-latest
     if: hashFiles('go.mod') != ''
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
         with: { go-version: "${{ env.GO_VERSION }}" }
       - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb0f9e6e3b # v9
@@ -175,7 +175,7 @@ jobs:
     runs-on: ubuntu-latest
     if: hashFiles('go.mod') != ''
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
         with: { go-version: "${{ env.GO_VERSION }}" }
       - run: |
