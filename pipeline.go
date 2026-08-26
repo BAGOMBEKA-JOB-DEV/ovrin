@@ -18,6 +18,7 @@ import (
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/office"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/pdf"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/prompt"
+	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/retry"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
 )
 
@@ -113,8 +114,17 @@ func run(ctx context.Context, cfg *config, src Source, sch *schema.Schema) (*out
 	}
 	meta.Usage = usage
 
+	// A parse failure is not handled here: stageRetry judges it along with
+	// everything else, because "the reply is not JSON" is the clearest case of
+	// a formatting mistake worth one more ask.
 	var object map[string]any
-	if err := json.Unmarshal(raw, &object); err != nil {
+	_ = json.Unmarshal(raw, &object) //nolint:errcheck // a nil object is the failure, and stageRetry reads it
+
+	// Stage 6b — ask again, once, when the reply was malformed rather than
+	// merely disappointing. See stageRetry.
+	_, object = stageRetry(ctx, cfg, req, sch, raw, object, &meta)
+
+	if object == nil {
 		// The bytes are attached to nothing: they are the model's reply, and a
 		// reply that failed to parse may contain document content quoted back.
 		return nil, &Error{
@@ -873,6 +883,85 @@ func stagePrompt(ctx context.Context, cfg *config, sch *schema.Schema, jsonSchem
 		Schema:      req.Schema,
 		Temperature: req.Temperature,
 	}, nil
+}
+
+// toModelRequest converts the internal request into the one a provider sees.
+func toModelRequest(req prompt.Request) ModelRequest {
+	content := make([]Content, 0, len(req.Content))
+	for _, c := range req.Content {
+		content = append(content, Content{
+			Reading:   Reading(c.Reading),
+			Page:      c.Page,
+			Text:      c.Text,
+			Image:     c.Image,
+			MediaType: c.MediaType,
+		})
+	}
+	return ModelRequest{
+		Instruction: req.Instruction,
+		Content:     content,
+		Schema:      req.Schema,
+		Temperature: req.Temperature,
+	}
+}
+
+// stageRetry asks once more when the reply was malformed rather than merely
+// disappointing, and returns the reply to use.
+//
+// It returns the original reply unchanged whenever it can, which is nearly
+// always: retry.Assess is deliberately reluctant, and a value that failed a
+// min, max, enum or format rule is the document disagreeing with the schema.
+// Asking again for that would be asking the model to invent something that
+// satisfies the rule, which is rule 8.5's cardinal sin. Only a reply that is
+// not usable JSON, or a field whose value could not be converted to its
+// declared type, is worth a second request.
+//
+// The document is not re-sent: the model has read it, and the follow-up carries
+// only the schema and what was wrong. That also bounds the cost of this to one
+// short request, which is why it needs no configuration.
+func stageRetry(ctx context.Context, cfg *config, req ModelRequest, sch *schema.Schema,
+	raw []byte, object map[string]any, meta *Metadata,
+) ([]byte, map[string]any) {
+	failures := retry.Assess(raw, replyResults(sch, object, cfg))
+	if len(failures) == 0 {
+		return raw, object
+	}
+
+	orig := prompt.Request{
+		Instruction: req.Instruction,
+		Schema:      req.Schema,
+		Temperature: req.Temperature,
+	}
+	second, err := retry.Build(orig, *sch, raw, failures)
+	if err != nil {
+		// Build refuses to retry a retry, which is how "once" is enforced.
+		// There is nothing to report: the first reply is still the answer.
+		return raw, object
+	}
+
+	start := time.Now()
+	resp, err := cfg.model.Generate(ctx, toModelRequest(second))
+	cfg.emit(ctx, Event{Op: OpGenerate, Duration: time.Since(start), Attempt: 2, Err: err})
+	if err != nil || resp == nil || len(resp.JSON) == 0 {
+		// A failed second attempt loses nothing. The first reply is returned
+		// and its fields are marked however they deserve.
+		return raw, object
+	}
+
+	var retried map[string]any
+	if err := json.Unmarshal(resp.JSON, &retried); err != nil {
+		return raw, object
+	}
+	if len(retry.Assess(resp.JSON, replyResults(sch, retried, cfg))) >= len(failures) {
+		// No better. Keep the first, so a second reply that is differently
+		// wrong cannot make the result worse than not retrying at all.
+		return raw, object
+	}
+
+	meta.Usage.InputTokens += resp.Usage.InputTokens
+	meta.Usage.OutputTokens += resp.Usage.OutputTokens
+	meta.Retried = true
+	return resp.JSON, retried
 }
 
 func stageGenerate(ctx context.Context, cfg *config, req ModelRequest, meta *Metadata) ([]byte, Usage, error) {

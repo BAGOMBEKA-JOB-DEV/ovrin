@@ -212,6 +212,7 @@ pkg ovrin, type Metadata struct, Kind Kind
 pkg ovrin, type Metadata struct, Pages int
 pkg ovrin, type Metadata struct, Providers map[Op]string
 pkg ovrin, type Metadata struct, Readings []Reading
+pkg ovrin, type Metadata struct, Retried bool
 pkg ovrin, type Metadata struct, Usage Usage
 pkg ovrin, type Model interface
 pkg ovrin, type Model interface, Generate(context.Context, ModelRequest) (*ModelResponse, error)

@@ -886,3 +886,148 @@ func TestHiddenDOCXTextIsExtractedAndFlagged(t *testing.T) {
 		t.Errorf("no reason mentions hidden text; reasons = %v", res.Reasons)
 	}
 }
+
+// sequenceModel replies with each body in turn, recording the instructions it
+// was given so a test can assert what the second request carried.
+type sequenceModel struct {
+	replies []string
+	reqs    *[]ovrin.ModelRequest
+}
+
+func (m *sequenceModel) Generate(_ context.Context, req ovrin.ModelRequest) (*ovrin.ModelResponse, error) {
+	*m.reqs = append(*m.reqs, req)
+	body := m.replies[len(m.replies)-1]
+	if n := len(*m.reqs) - 1; n < len(m.replies) {
+		body = m.replies[n]
+	}
+	return &ovrin.ModelResponse{
+		JSON:  []byte(body),
+		Usage: ovrin.Usage{InputTokens: 10, OutputTokens: 5},
+	}, nil
+}
+
+// A model that returns a string where a number belongs made a formatting
+// mistake, not a claim about the document. Asking once more is cheap and
+// usually works — and the second request must not re-send the document, which
+// is what makes it cheap (docs/pipeline.md stage 6).
+func TestAMalformedReplyIsAskedForAgainOnce(t *testing.T) {
+	t.Parallel()
+
+	type Doc struct {
+		Total float64 `ovrin:"total amount,required,min=0"`
+	}
+
+	var reqs []ovrin.ModelRequest
+	c := ovrin.New(ovrin.WithModel(&sequenceModel{
+		replies: []string{`{"total":"twelve fifty"}`, `{"total":1250}`},
+		reqs:    &reqs,
+	}))
+
+	res, err := ovrin.Extract[Doc](context.Background(), c,
+		ovrin.Bytes([]byte("Total: 1250.00\n")))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	if len(reqs) != 2 {
+		t.Fatalf("the model was called %d times, want 2", len(reqs))
+	}
+	if !res.Metadata.Retried {
+		t.Error("Metadata.Retried is false after a retry")
+	}
+	if res.Data.Total != 1250 {
+		t.Errorf("Total = %v, want the retried value 1250", res.Data.Total)
+	}
+
+	// The document is not re-sent. Paying to read it twice to fix a number
+	// that was quoted is the whole cost this avoids.
+	if len(reqs[1].Content) != 0 {
+		t.Errorf("the second request carried %d pieces of content, want none",
+			len(reqs[1].Content))
+	}
+	// And the retry asks for the same shape at the same determinism.
+	if string(reqs[1].Schema) != string(reqs[0].Schema) {
+		t.Error("the second request asked for a different schema")
+	}
+
+	// Usage covers both calls, or a caller cannot see what they paid.
+	if res.Metadata.Usage.InputTokens != 20 {
+		t.Errorf("InputTokens = %d, want 20 across both attempts",
+			res.Metadata.Usage.InputTokens)
+	}
+}
+
+// The retry must stay reluctant. A value that failed min, max, enum or format
+// is the document disagreeing with the schema, and asking again can only
+// invite the model to invent something that satisfies the rule — which is the
+// one thing this library must never do (docs/rules.md §8.5).
+func TestABrokenRuleIsNotRetried(t *testing.T) {
+	t.Parallel()
+
+	type Doc struct {
+		Total float64 `ovrin:"total amount,required,min=1000"`
+	}
+
+	var reqs []ovrin.ModelRequest
+	c := ovrin.New(ovrin.WithModel(&sequenceModel{
+		// A well-formed number that breaks the rule, then a compliant one the
+		// retry would take if it wrongly fired.
+		replies: []string{`{"total":12.5}`, `{"total":5000}`},
+		reqs:    &reqs,
+	}))
+
+	res, err := ovrin.Extract[Doc](context.Background(), c,
+		ovrin.Bytes([]byte("Total: 12.50\n")))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	if len(reqs) != 1 {
+		t.Fatalf("the model was called %d times; a broken rule must not be retried", len(reqs))
+	}
+	if res.Metadata.Retried {
+		t.Error("Metadata.Retried is true for a reply that was never retried")
+	}
+	if res.Data.Total != 12.5 {
+		t.Errorf("Total = %v, want the document's own 12.5 kept", res.Data.Total)
+	}
+	if res.Valid {
+		t.Error("Valid is true despite a broken min rule")
+	}
+}
+
+// A second reply that is no better than the first must not replace it, or a
+// retry could make a result worse than not retrying at all.
+func TestAWorseSecondReplyIsDiscarded(t *testing.T) {
+	t.Parallel()
+
+	type Doc struct {
+		Total float64 `ovrin:"total amount,required,min=0"`
+	}
+
+	var reqs []ovrin.ModelRequest
+	c := ovrin.New(ovrin.WithModel(&sequenceModel{
+		replies: []string{`{"total":"twelve"}`, `{"total":"still not a number"}`},
+		reqs:    &reqs,
+	}))
+
+	res, err := ovrin.Extract[Doc](context.Background(), c,
+		ovrin.Bytes([]byte("Total: 1250.00\n")))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	if len(reqs) != 2 {
+		t.Fatalf("the model was called %d times, want 2", len(reqs))
+	}
+	if res.Metadata.Retried {
+		t.Error("Retried is true although the second reply was no improvement")
+	}
+	// Neither reply could be converted, so the field is absent — not guessed.
+	if f := res.Fields["total"]; f.Found {
+		t.Errorf("total is marked found from an unconvertible reply: %+v", f)
+	}
+	if res.Data.Total != 0 || res.Valid {
+		t.Errorf("a value was invented: Total = %v, Valid = %v", res.Data.Total, res.Valid)
+	}
+}
