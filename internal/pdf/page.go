@@ -374,7 +374,7 @@ func (d *Doc) Page(n int) (page Page, err error) {
 	if cerr != nil {
 		d.note(cerr)
 	}
-	ip := newInterp(d)
+	ip := newInterp(d, rect{minX: x0, minY: y0, maxX: x1, maxY: y1})
 	ip.runContent(content, e.resources, dp)
 	ip.flushWord()
 	if ip.err != nil {
@@ -398,9 +398,12 @@ func (d *Doc) Page(n int) (page Page, err error) {
 			HeightPt:    ph,
 		},
 	}
+	if bg, ok := ip.background(); ok {
+		out.Content.Background = toNormaliseColour(bg)
+	}
 	out.Content.Words = make([]normalise.Word, 0, len(ip.runs))
 	for _, r := range ip.runs {
-		out.Content.Words = append(out.Content.Words, normalise.Word{
+		w := normalise.Word{
 			Text: r.text,
 			Box:  toTopLeft(r, x0, y0, x1, y1, e.rotate),
 			// A text layer is the characters themselves rather than a
@@ -410,9 +413,24 @@ func (d *Doc) Page(n int) (page Page, err error) {
 			// (docs/confidence.md).
 			Confidence: 1,
 			Line:       r.line,
-		})
+		}
+		if r.colourKnown {
+			w.Colour = toNormaliseColour(r.colour)
+		}
+		out.Content.Words = append(out.Content.Words, w)
 	}
 	return out, nil
+}
+
+// toNormaliseColour crosses the boundary between this package's device colour
+// and the one internal/normalise compares in.
+//
+// It allocates because the field is a pointer, and the field is a pointer
+// because "this reading does not report a colour" and "this text is black" are
+// different answers and the background check must not confuse them
+// (internal/normalise, Word.Colour).
+func toNormaliseColour(c colour) *normalise.Colour {
+	return &normalise.Colour{R: c.r, G: c.g, B: c.b}
 }
 
 // minMax orders two numbers, because a MediaBox may be written with either

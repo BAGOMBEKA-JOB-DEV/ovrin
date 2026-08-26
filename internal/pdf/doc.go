@@ -14,8 +14,19 @@
 // and text-positioning operators. That is enough to reconstruct characters
 // and their boxes.
 //
-// It does not render, edit, sign, decrypt, fill forms, or handle colour and
-// imaging. Those are the hard parts of PDF and ovrin needs none of them; not
+// It also follows the colour operators far enough to say what colour a word
+// was painted in and what colour the paper under it is. That is not imaging
+// and it is not there for its own sake: text drawn in the page's background
+// colour is one of the documented ways an instruction is hidden from the
+// person reviewing a document, and internal/normalise cannot report a class
+// of attack that no reading ever measures
+// (docs/adr/0017-untrusted-document-content.md mitigation 4,
+// docs/threat-model.md T1). A colour space this package will not convert —
+// Separation, DeviceN, Lab, a pattern — yields no colour rather than a guess,
+// and no colour skips the check.
+//
+// It does not render, edit, sign, decrypt, fill forms, manage colour or decode
+// an image. Those are the hard parts of PDF and ovrin needs none of them; not
 // attempting them is what makes the rest tractable.
 //
 // # What it refuses, by name
@@ -38,7 +49,10 @@
 //     partial gibberish as though it were text: a broken ToUnicode table
 //     producing plausible rubbish poisons everything downstream, which is why
 //     stage 2's three-threshold heuristic is measured here and exposed as
-//     [Stats].
+//     [Stats]. A symbolic TrueType with no /Encoding and no /ToUnicode is the
+//     sharpest case: its codes mean whatever its own font program says, so
+//     they are counted undecodable rather than read through a Latin encoding
+//     that would produce the right shape and the wrong letters.
 //
 // # Limits
 //

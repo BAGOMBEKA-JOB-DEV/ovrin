@@ -127,6 +127,7 @@ type Recognition struct {
     Confidence float64
     Language   string
     Raw        any
+    Usage      Usage
 }
 
 type Word struct {

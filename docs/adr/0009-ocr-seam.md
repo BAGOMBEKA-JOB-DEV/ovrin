@@ -47,6 +47,7 @@ type Recognition struct {
     Confidence float64   // provider's own, over the page
     Language   string
     Raw        any
+    Usage      Usage     // what recognising this page cost
 }
 
 type Word struct {

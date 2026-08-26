@@ -33,26 +33,43 @@ const pointsPerInch = 72.0
 //
 // A Renderer is safe for concurrent use by multiple goroutines. PDFium itself
 // is not thread-safe, so safety comes from never sharing one: the Renderer
-// holds a pool of independent PDFium instances, each its own WebAssembly
-// module with its own linear memory, and a Render borrows one for the length of
-// the call and returns it afterwards. Concurrency is therefore bounded by the
-// instance count ([WithInstances]) rather than by the number of callers — a
-// Render that arrives when every instance is busy waits for one, or for its
-// context to end, whichever comes first.
+// holds a fixed set of PDFium instances, and a Render borrows one for the
+// length of the call and returns it afterwards. Concurrency is therefore
+// bounded by the instance count ([WithInstances]) rather than by the number of
+// callers — a Render that arrives when every instance is busy waits for one,
+// or for its context to end, whichever comes first.
+//
+// Each instance gets not just its own WebAssembly module but its own Wazero
+// runtime, which is stronger isolation than it first appears to need. Two
+// module instances sharing a runtime also share the host functions Emscripten
+// imports, and those cache a computed signature on first use — a write that
+// two concurrent renders race on. Wazero's compiled-code cache is shared
+// across the runtimes instead, so the isolation costs memory rather than the
+// second of compilation it would otherwise cost per instance.
 //
 // Call [Renderer.Close] when finished. Until it is called the compiled
-// WebAssembly module and every pooled instance stay resident.
+// WebAssembly module and every instance stay resident.
 type Renderer struct {
 	maxPagePixels int
 	instances     int
 
-	// initOnce guards lazy pool construction. Compiling four megabytes of
+	// initOnce guards lazy construction. Compiling four megabytes of
 	// WebAssembly takes about a second, and [New] cannot report an error, so
 	// the cost is paid on the first Render by whoever asks for one — and not
 	// at all by a program that constructs a Renderer it never uses.
 	initOnce sync.Once
-	pool     pdfium.Pool
 	initErr  error
+
+	// cache holds the compiled PDFium machine code, shared by every runtime so
+	// that the second and later runtimes are near-free to build.
+	cache wazero.CompilationCache
+
+	// pools holds one single-worker PDFium pool per instance, and free is the
+	// semaphore that hands them out. One pool per instance means one wazero
+	// runtime per instance, which is what makes concurrent rendering safe; see
+	// the Renderer doc comment.
+	pools []pdfium.Pool
+	free  chan pdfium.Pool
 
 	// mu guards closed, and orders it against inflight so that no work can be
 	// registered after Close has begun waiting.
@@ -202,21 +219,23 @@ func (r *Renderer) check(doc ovrin.Document, page, dpi int) error {
 // responsible for releasing everything it acquires, on every path, because the
 // caller may already have returned on a cancelled context.
 func (r *Renderer) render(ctx context.Context, doc ovrin.Document, page, dpi int) result {
-	pool, err := r.ensurePool()
-	if err != nil {
+	if err := r.ensurePools(); err != nil {
 		return result{err: err}
 	}
-	if err := ctx.Err(); err != nil {
-		return result{err: cancelled(page, err)}
-	}
 
-	inst, err := pool.GetInstance(acquireTimeout(ctx))
+	// Wait for a free instance, or for the caller to give up.
+	var pool pdfium.Pool
+	select {
+	case pool = <-r.free:
+	case <-ctx.Done():
+		return result{err: cancelled(page, ctx.Err())}
+	}
+	defer func() { r.free <- pool }()
+
+	inst, err := pool.GetInstance(instanceTimeout)
 	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return result{err: cancelled(page, ctxErr)}
-		}
-		return result{err: renderErr(page, ovrin.ErrUnavailable,
-			"no PDFium instance became available")}
+		return result{err: renderErr(page, ovrin.ErrInternal,
+			"a PDFium instance could not be taken from its pool").WithCause(err)}
 	}
 	defer inst.Close()
 
@@ -325,60 +344,87 @@ func copyRGBA(src *image.RGBA) *image.RGBA {
 	return dst
 }
 
-// ensurePool compiles the WebAssembly module and starts the instance pool, at
-// most once, and remembers the failure if there was one.
-func (r *Renderer) ensurePool() (pdfium.Pool, error) {
+// ensurePools compiles the WebAssembly module and builds one single-worker
+// pool — one Wazero runtime — per instance, at most once, remembering the
+// failure if there was one.
+func (r *Renderer) ensurePools() error {
 	r.initOnce.Do(func() {
-		pool, err := webassembly.Init(webassembly.Config{
-			MinIdle:  0,
-			MaxIdle:  r.instances,
-			MaxTotal: r.instances,
+		// One compilation, shared by every runtime. Without this each runtime
+		// would compile four megabytes of WebAssembly for itself.
+		r.cache = wazero.NewCompilationCache()
 
-			// The default mounts the host's root directory into the sandbox.
-			// An empty FSConfig gives the module no filesystem at all, which
-			// is the point of running an untrusted C library in a sandbox:
-			// a PDFium memory-safety bug then cannot read the host's files.
-			// PDFium falls back to its built-in fonts.
-			FSConfig: wazero.NewFSConfig(),
+		r.pools = make([]pdfium.Pool, 0, r.instances)
+		r.free = make(chan pdfium.Pool, r.instances)
+		for i := 0; i < r.instances; i++ {
+			pool, err := webassembly.Init(webassembly.Config{
+				MinIdle:  1,
+				MaxIdle:  1,
+				MaxTotal: 1,
 
-			// PDFium writes parse diagnostics to stderr, and a diagnostic
-			// about a malformed object can quote the object. Document content
-			// never reaches a log (docs/rules.md §7.5), so it goes nowhere.
-			Stdout: io.Discard,
-			Stderr: io.Discard,
+				RuntimeConfig: wazero.NewRuntimeConfig().WithCompilationCache(r.cache),
 
-			// Reuse instances rather than instantiating a module per render.
-			// Instantiation is cheap next to compilation but not free, and a
-			// bulk scan is thousands of renders. Every document is closed
-			// before its instance is returned, so nothing carries over.
-			ReuseWorkers: true,
-		})
-		if err != nil {
-			r.initErr = renderErr(0, ovrin.ErrInternal,
-				"the PDFium WebAssembly module could not be started")
-			return
+				// The default mounts the host's root directory into the
+				// sandbox. An empty FSConfig gives the module no filesystem at
+				// all, which is the point of running a large C library in a
+				// sandbox: a PDFium memory-safety bug then cannot reach the
+				// host's files. PDFium falls back to its built-in fonts.
+				FSConfig: wazero.NewFSConfig(),
+
+				// PDFium writes parse diagnostics to stderr, and a diagnostic
+				// about a malformed object can quote the object. Document
+				// content never reaches a log (docs/rules.md §7.5), so it goes
+				// nowhere.
+				Stdout: io.Discard,
+				Stderr: io.Discard,
+
+				// Reuse the worker rather than instantiating a module per
+				// render. Instantiation is cheap next to compilation but not
+				// free, and a bulk scan is thousands of renders. Every
+				// document is closed before its instance is returned, so
+				// nothing carries over.
+				ReuseWorkers: true,
+			})
+			if err != nil {
+				r.closePools()
+				r.initErr = renderErr(0, ovrin.ErrInternal,
+					"the PDFium WebAssembly module could not be started").WithCause(err)
+				return
+			}
+			r.pools = append(r.pools, pool)
+			r.free <- pool
 		}
-		r.pool = pool
 	})
-	return r.pool, r.initErr
+	return r.initErr
 }
 
-// acquireTimeout turns the caller's deadline into the timeout the pool wants.
-//
-// An adapter does not invent a timeout policy (docs/rules.md §6.2), so there
-// is no default here: without a deadline the wait is unbounded, and it is
-// cancellation — which Render honours separately — that ends it.
-func acquireTimeout(ctx context.Context) time.Duration {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return time.Duration(math.MaxInt64)
+// closePools shuts every pool down and releases the compiled code. It is only
+// safe to call when no render holds an instance.
+func (r *Renderer) closePools() error {
+	var firstErr error
+	for _, pool := range r.pools {
+		if err := pool.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	d := time.Until(deadline)
-	if d < 0 {
-		return 0
+	r.pools = nil
+	if r.cache != nil {
+		if err := r.cache.Close(context.Background()); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		r.cache = nil
 	}
-	return d
+	return firstErr
 }
+
+// instanceTimeout bounds taking the single worker out of its own pool.
+//
+// This is not a rendering timeout — an adapter does not invent one
+// (docs/rules.md §6.2). Waiting for an instance is handled by the Renderer's
+// own semaphore, which honours the caller's context; by the time this is
+// called the pool is known to be free, so any wait at all means the pool is
+// broken rather than busy, and a finite bound turns that into an error instead
+// of a hang.
+const instanceTimeout = 30 * time.Second
 
 // openErr classifies a failure to open the document.
 //
@@ -458,11 +504,9 @@ func (r *Renderer) Close() error {
 
 	r.inflight.Wait()
 
-	if r.pool == nil {
-		return nil
-	}
-	if err := r.pool.Close(); err != nil {
-		return renderErr(0, ovrin.ErrInternal, "the PDFium pool did not shut down cleanly").WithCause(err)
+	if err := r.closePools(); err != nil {
+		return renderErr(0, ovrin.ErrInternal,
+			"the PDFium runtimes did not shut down cleanly").WithCause(err)
 	}
 	return nil
 }

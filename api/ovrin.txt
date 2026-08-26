@@ -247,6 +247,7 @@ pkg ovrin, type Recognition struct, Confidence float64
 pkg ovrin, type Recognition struct, Language string
 pkg ovrin, type Recognition struct, Lines []Line
 pkg ovrin, type Recognition struct, Raw any
+pkg ovrin, type Recognition struct, Usage Usage
 pkg ovrin, type Recognition struct, Words []Word
 pkg ovrin, type Rect struct
 pkg ovrin, type Rect struct, MaxX float64
