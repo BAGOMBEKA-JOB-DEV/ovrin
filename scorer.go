@@ -84,8 +84,12 @@ func (defaultScorer) Score(f FieldEvidence) (float64, []Signal) {
 	if v, ok := formatSignal(f.Validation); ok {
 		add(SignalFormat, v, WeightFormat, "the declared format parsed")
 	}
-	if len(f.Candidates) > 1 {
-		add(SignalAgreement, 0, WeightAgreement, "readings disagree")
+	if f.Agreement != nil {
+		note := f.AgreementNote
+		if note == "" {
+			note = "two readings were compared"
+		}
+		add(SignalAgreement, *f.Agreement, WeightAgreement, note)
 	}
 
 	mean := weightedMean(signals)

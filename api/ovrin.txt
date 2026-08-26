@@ -178,6 +178,8 @@ pkg ovrin, type Explanation struct, Signals []Signal
 pkg ovrin, type Explanation struct, Validation []RuleResult
 pkg ovrin, type Explanation struct, Value any
 pkg ovrin, type FieldEvidence struct
+pkg ovrin, type FieldEvidence struct, Agreement *float64
+pkg ovrin, type FieldEvidence struct, AgreementNote string
 pkg ovrin, type FieldEvidence struct, Candidates []Candidate
 pkg ovrin, type FieldEvidence struct, Field string
 pkg ovrin, type FieldEvidence struct, Found bool

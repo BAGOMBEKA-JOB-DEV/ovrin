@@ -74,14 +74,21 @@ func nextToken(d *xml.Decoder, part Part) (xml.Token, error) {
 }
 
 // skipElement consumes the remainder of the element whose start tag was just
-// read, without recursing.
+// read, without recursing and without exceeding the nesting ceiling.
 //
 // It is written out rather than borrowed from encoding/xml because
 // Decoder.Skip calls itself once per level of nesting, so skipping a subtree
 // nested a million deep exhausts the goroutine stack. This one keeps a counter
 // instead, so the cost of skipping is a single int whatever arrives
 // (docs/threat-model.md T2, T3).
-func skipElement(d *xml.Decoder, part Part) error {
+//
+// The ceiling is applied here as well as on the paths that descend, so that
+// the depth limit is a property of the document rather than of which elements
+// this package happens to be interested in. Without it, nesting a payload
+// inside a subtree that gets skipped would buy an attacker unlimited depth
+// through the standard library's decoder — which is exactly the shape of thing
+// a limit is supposed to be impossible to route around (ADR-0020).
+func skipElement(d *xml.Decoder, part Part, maxDepth int) error {
 	depth := 1
 	for depth > 0 {
 		t, err := nextToken(d, part)
@@ -94,6 +101,9 @@ func skipElement(d *xml.Decoder, part Part) error {
 		switch t.(type) {
 		case xml.StartElement:
 			depth++
+			if depth > maxDepth {
+				return &detect.LimitError{Limit: detect.LimitDepth, Max: int64(maxDepth)}
+			}
 		case xml.EndElement:
 			depth--
 		}

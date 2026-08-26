@@ -105,11 +105,15 @@ func TestZipBombIsRefused(t *testing.T) {
 		t.Parallel()
 		// Each header is well under the per-stream ceiling and they are only
 		// a bomb cumulatively — a thousand entries of a mebibyte is the same
-		// attack as one entry of a gibibyte (ADR-0020). All of them are read,
-		// because docxSkipped opens every auxiliary part to find out whether
-		// it held text.
+		// attack as one entry of a gibibyte (ADR-0020).
+		//
+		// The text is whitespace, which is what makes every one of them get
+		// read: docxSkipped stops at the first part it can show held text, so
+		// an attacker who wants all forty decompressed fills them with
+		// something that is not text. That is the case the cumulative counter
+		// is for, and it is why this fixture is blank rather than full.
 		hdr := `<?xml version="1.0"?><w:hdr ` + wordNS + `><w:p><w:r><w:t>` +
-			strings.Repeat("h", 200<<10) + `</w:t></w:r></w:p></w:hdr>`
+			strings.Repeat(" ", 200<<10) + `</w:t></w:r></w:p></w:hdr>`
 		entries := []entry{
 			{name: contentTypesName, body: []byte(contentTypes)},
 			{name: docxBody, body: []byte(`<?xml version="1.0"?><w:document ` + wordNS + `><w:body/></w:document>`)},

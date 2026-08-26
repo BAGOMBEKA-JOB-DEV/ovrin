@@ -87,8 +87,9 @@ func ExtractDOCX(data []byte, lim detect.Limits, cum *detect.Counter) (doc *Docu
 	text := detect.NewCounter(detect.LimitTextBytes, lim.MaxTextBytes)
 
 	w := &docxWalker{
-		b:    newPageBuilder(1, text),
-		part: PartDocument,
+		b:        newPageBuilder(1, text),
+		part:     PartDocument,
+		maxDepth: lim.MaxDepth,
 	}
 	w.acc.text = text
 
@@ -119,11 +120,12 @@ func ExtractDOCX(data []byte, lim detect.Limits, cum *detect.Counter) (doc *Docu
 // next one. Depth is bounded by a detect.Depth budget, so descending into
 // everything is safe.
 type docxWalker struct {
-	b      *pageBuilder
-	acc    textAccumulator
-	part   Part
-	hidden int
-	inRow  int
+	b        *pageBuilder
+	acc      textAccumulator
+	part     Part
+	maxDepth int
+	hidden   int
+	inRow    int
 }
 
 // readPart opens a part and walks it.
@@ -163,7 +165,7 @@ func (w *docxWalker) element(d *xml.Decoder, el xml.StartElement, dep detect.Dep
 		return err
 	}
 	if docxSkip[el.Name.Local] {
-		return skipElement(d, w.part)
+		return skipElement(d, w.part, w.maxDepth)
 	}
 	switch el.Name.Local {
 	case "t":
@@ -174,13 +176,13 @@ func (w *docxWalker) element(d *xml.Decoder, el xml.StartElement, dep detect.Dep
 		if err := w.acc.addString("\t"); err != nil {
 			return err
 		}
-		return skipElement(d, w.part)
+		return skipElement(d, w.part, w.maxDepth)
 	case "br", "cr":
 		if err := w.flush(); err != nil {
 			return err
 		}
 		w.b.endLine()
-		return skipElement(d, w.part)
+		return skipElement(d, w.part, w.maxDepth)
 	case "p":
 		return w.paragraph(d, dep)
 	case "tr":
@@ -380,7 +382,7 @@ func (w *docxWalker) alternate(d *xml.Decoder, dep detect.Depth) error {
 				}
 				continue
 			}
-			if err := skipElement(d, w.part); err != nil {
+			if err := skipElement(d, w.part, w.maxDepth); err != nil {
 				return err
 			}
 		case xml.EndElement:

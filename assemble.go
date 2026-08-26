@@ -250,7 +250,7 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 	if !fr.Valid {
 		a.valid = false
 	}
-	a.recordReasons(f, key, vr, gr, conf)
+	a.recordReasons(f, key, vr, gr, conf, cands)
 	if required(f) {
 		a.required = append(a.required, conf)
 	} else {
@@ -315,7 +315,7 @@ func (a *assembler) suspicious() bool {
 	return len(a.suspect) > 0
 }
 
-func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result, gr ground.Result, conf float64) {
+func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result, gr ground.Result, conf float64, cands []Candidate) {
 	add := func(why string) { a.reasons = append(a.reasons, ReviewReason{Field: key, Why: why}) }
 
 	switch {
@@ -324,7 +324,7 @@ func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result
 	case gr.Applicable && gr.Grounding == ground.NotFound:
 		add(ground.ReasonNotFound)
 	}
-	if len(fr.Candidates) > 1 {
+	if len(cands) > 1 {
 		add("the readings disagree")
 	}
 	if vr.Ambiguity != nil {
@@ -479,4 +479,54 @@ func set(target reflect.Value, v any) {
 
 func round2(f float64) float64 {
 	return float64(int64(f*100+0.5)) / 100
+}
+
+// secondValues walks a second reading's reply through the same schema, so its
+// values are keyed exactly as the first reading's are.
+//
+// Comparing by key rather than by position is what makes the comparison mean
+// anything: two replies answer the same questions, and a positional match would
+// compare an invoice number against a vendor name the moment one reply omitted
+// a field.
+func secondValues(sch *schema.Schema, object map[string]any, cfg *config) validate.Fields {
+	v := validate.New(validate.WithDateOrder(validate.DateOrder(cfg.dateOrder)))
+	out := make(validate.Fields)
+	var walk func(fields []schema.Field, obj map[string]any, prefix string)
+	walk = func(fields []schema.Field, obj map[string]any, prefix string) {
+		for i := range fields {
+			f := fields[i]
+			key := f.Key
+			if prefix != "" {
+				key = prefix + "." + leaf(f.Key)
+			}
+			raw := lookup(obj, leaf(f.Key))
+			switch f.Kind {
+			case schema.KindObject:
+				nested, _ := raw.(map[string]any)
+				walk(f.Fields, nested, key)
+			case schema.KindArray:
+				items, _ := raw.([]any)
+				for j, item := range items {
+					if f.Elem == nil {
+						continue
+					}
+					ek := schema.IndexKey(key, j)
+					if f.Elem.Kind == schema.KindObject {
+						nested, _ := item.(map[string]any)
+						walk(f.Elem.Fields, nested, ek)
+						continue
+					}
+					if r := v.Field(*f.Elem, item); r.Converted {
+						out[ek] = r.Value
+					}
+				}
+			default:
+				if r := v.Field(f, raw); r.Converted {
+					out[key] = r.Value
+				}
+			}
+		}
+	}
+	walk(sch.Fields, object, "")
+	return out
 }

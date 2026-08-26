@@ -600,3 +600,132 @@ func TestMixedDocumentReadsEachPageItsOwnWay(t *testing.T) {
 		t.Errorf("page 2 does not carry what OCR read: %q", seen[1].Text)
 	}
 }
+
+// twoReadingModel answers differently depending on whether it was shown text
+// or an image, standing in for two readings that disagree.
+type twoReadingModel struct{ onText, onImage map[string]any }
+
+func (m twoReadingModel) Generate(_ context.Context, r ovrin.ModelRequest) (*ovrin.ModelResponse, error) {
+	reply := m.onText
+	for _, c := range r.Content {
+		if len(c.Image) > 0 {
+			reply = m.onImage
+			break
+		}
+	}
+	b, err := json.Marshal(reply)
+	if err != nil {
+		return nil, err
+	}
+	return &ovrin.ModelResponse{JSON: b}, nil
+}
+
+// The failure ADR-0014 was written around, and which nothing in ovrin could
+// catch until now: two well-formed numbers, both satisfying every rule, an
+// order of magnitude apart. Only two independent readings find it.
+func TestTwoReadingsCatchADisagreement(t *testing.T) {
+	t.Parallel()
+
+	type Invoice struct {
+		Total float64 `ovrin:"total amount including tax,required,min=0"`
+	}
+
+	c := ovrin.New(
+		ovrin.WithModel(twoReadingModel{
+			onText:  map[string]any{"total": 25000.0},
+			onImage: map[string]any{"total": 2500.0},
+		}),
+		ovrin.WithOCR(wordOCR{words: []string{"TOTAL", "25,000"}}),
+	)
+
+	res, err := ovrin.Extract[Invoice](context.Background(), c, ovrin.Bytes(testPNG()),
+		ovrin.WithReading(ovrin.ModeBoth))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	f := res.Fields["total"]
+
+	if len(f.Candidates) < 2 {
+		t.Fatalf("Candidates = %v, want both readings recorded", f.Candidates)
+	}
+	// Nothing is discarded and nothing is silently resolved (ADR-0014).
+	seen := map[float64]bool{}
+	for _, cand := range f.Candidates {
+		if v, ok := cand.Value.(float64); ok {
+			seen[v] = true
+		}
+	}
+	if !seen[25000] || !seen[2500] {
+		t.Errorf("Candidates hold %v, want both 25000 and 2500", f.Candidates)
+	}
+
+	var agreement *ovrin.Signal
+	for i := range f.Signals {
+		if f.Signals[i].Name == ovrin.SignalAgreement {
+			agreement = &f.Signals[i]
+		}
+	}
+	if agreement == nil {
+		t.Fatalf("no agreement signal; signals: %v", names(f.Signals))
+	}
+	if agreement.Value != 0 {
+		t.Errorf("agreement = %v on disagreeing readings, want 0", agreement.Value)
+	}
+	if f.Confidence > ovrin.CapDisagreement {
+		t.Errorf("confidence = %v, want no more than CapDisagreement (%v)",
+			f.Confidence, ovrin.CapDisagreement)
+	}
+	if !res.NeedsReview {
+		t.Error("NeedsReview = false although the readings disagree")
+	}
+
+	// The reason names the field, never the amounts: it is the part most
+	// likely to be logged verbatim (rule §7.5, ADR-0014 as corrected).
+	found := false
+	for _, r := range res.Reasons {
+		if r.Field == "total" && contains(r.Why, "disagree") {
+			found = true
+			if contains(r.Why, "25000") || contains(r.Why, "2500") {
+				t.Errorf("the review reason carries a document value: %q", r.Why)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no review reason names the disagreement; reasons: %v", res.Reasons)
+	}
+}
+
+// A check that fired on formatting would fire on nearly every document, and a
+// flag that fires constantly is a flag nobody reads.
+func TestFormattingIsNotADisagreement(t *testing.T) {
+	t.Parallel()
+
+	type Invoice struct {
+		Total float64 `ovrin:"total amount,required,min=0"`
+	}
+
+	c := ovrin.New(
+		ovrin.WithModel(twoReadingModel{
+			onText:  map[string]any{"total": 25000.0},
+			onImage: map[string]any{"total": "25,000"}, // same number, written differently
+		}),
+		ovrin.WithOCR(wordOCR{words: []string{"TOTAL", "25,000"}}),
+	)
+
+	res, err := ovrin.Extract[Invoice](context.Background(), c, ovrin.Bytes(testPNG()),
+		ovrin.WithReading(ovrin.ModeBoth))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	f := res.Fields["total"]
+	for _, s := range f.Signals {
+		if s.Name == ovrin.SignalAgreement && s.Value != 1 {
+			t.Errorf("agreement = %v; 25000 and \"25,000\" are the same number", s.Value)
+		}
+	}
+	if len(f.Candidates) > 1 {
+		t.Errorf("a formatting difference was recorded as a disagreement: %v", f.Candidates)
+	}
+}

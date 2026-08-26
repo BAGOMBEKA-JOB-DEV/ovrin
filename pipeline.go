@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io/fs"
 	"time"
 
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/detect"
@@ -909,6 +910,13 @@ func classify(op Op, provider string, err error) error {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return (&Error{Op: op, Provider: provider, Kind: ErrUnavailable,
 			Message: "the context ended before the stage completed"}).WithCause(err)
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, fs.ErrPermission):
+		// A path that does not exist, or that we may not read, is the caller's
+		// to fix. Falling through to ErrInternal told them to file a bug
+		// against ovrin for their own typo — the exact misdirection ADR-0030
+		// warns ErrInternal must never become.
+		return (&Error{Op: op, Provider: provider, Kind: ErrNoContent,
+			Message: "the source could not be opened"}).WithCause(err)
 	case errors.Is(err, detect.ErrUnsupportedFormat), errors.Is(err, img.ErrUnsupportedFormat):
 		kind = ErrUnsupportedFormat
 	case errors.Is(err, detect.ErrLimitExceeded), errors.Is(err, img.ErrLimitExceeded):

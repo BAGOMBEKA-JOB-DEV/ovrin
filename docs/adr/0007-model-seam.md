@@ -77,6 +77,19 @@ conversation state, so it cannot grow those by accident. Anyone can implement
 it against a provider we have never heard of, or against a local model, without
 touching ovrin.
 
+> **Correction, 2026-08-26.** The "Bad" paragraph below said a self-correcting
+> loop "cannot be expressed" and that the seam would have to change for it.
+> **That was wrong**, and `internal/retry` was built without touching the seam:
+> `Generate` is stateless and takes a whole `ModelRequest`, so a correction is
+> simply a second call with the schema, the previous reply as content, and an
+> instruction built from the schema — no new field on `ModelRequest`,
+> `ModelResponse` or `Content`.
+>
+> What is genuinely foreclosed is narrower: a **conversation**. There is no
+> assistant turn, so the retry is a fresh call and a provider cannot reuse a
+> cached prefix. That is a cost, not a blocker — and it is cheaper than the
+> alternative, because the document is not re-sent at all.
+
 **Bad.** It is a second abstraction stacked on whatever the user's AI library
 already provides — for skyl users, an interface over an interface, which is
 real conceptual overhead and one more layer to read when debugging. Multi-turn

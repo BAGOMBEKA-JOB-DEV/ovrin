@@ -79,11 +79,12 @@ func ExtractXLSX(data []byte, lim detect.Limits, cum *detect.Counter) (doc *Docu
 	pages := make([]normalise.Page, 0, len(sheets))
 	for i, name := range sheets {
 		w := &xlsxWalker{
-			b:    newPageBuilder(i+1, text),
-			sst:  sst,
-			text: text,
-			part: PartWorksheet,
-			page: i + 1,
+			b:        newPageBuilder(i+1, text),
+			sst:      sst,
+			text:     text,
+			part:     PartWorksheet,
+			maxDepth: lim.MaxDepth,
+			page:     i + 1,
 		}
 		w.acc.text = text
 		// A sheet the workbook names but the container does not hold is an
@@ -408,12 +409,13 @@ func eachElement(d *xml.Decoder, part Part, lim detect.Limits, fn func(xml.Start
 // xlsxWalker turns one worksheet into a page: one line per row, one word per
 // cell.
 type xlsxWalker struct {
-	b    *pageBuilder
-	acc  textAccumulator
-	sst  []string
-	text *detect.Counter
-	part Part
-	page int
+	b        *pageBuilder
+	acc      textAccumulator
+	sst      []string
+	text     *detect.Counter
+	part     Part
+	maxDepth int
+	page     int
 }
 
 // cell is one buffered cell, kept with its column so a row can be put back in
@@ -462,7 +464,7 @@ func (w *xlsxWalker) element(d *xml.Decoder, el xml.StartElement, dep detect.Dep
 		// Sheet furniture. A print header is not a cell, and the drawing
 		// parts hold shapes whose text lives in a part of their own that the
 		// worksheet only references.
-		return skipElement(d, w.part)
+		return skipElement(d, w.part, w.maxDepth)
 	default:
 		return w.children(d, dep)
 	}
@@ -508,7 +510,7 @@ func (w *xlsxWalker) row(d *xml.Decoder, dep detect.Depth) error {
 		switch t := t.(type) {
 		case xml.StartElement:
 			if t.Name.Local != "c" {
-				if err := skipElement(d, w.part); err != nil {
+				if err := skipElement(d, w.part, w.maxDepth); err != nil {
 					return err
 				}
 				continue
@@ -568,7 +570,7 @@ func (w *xlsxWalker) cell(d *xml.Decoder, el xml.StartElement, dep detect.Depth)
 			default:
 				// A formula's own text is not what the cell shows; the cached
 				// result in v is. Everything else in a cell is formatting.
-				if err := skipElement(d, w.part); err != nil {
+				if err := skipElement(d, w.part, w.maxDepth); err != nil {
 					return out, err
 				}
 			}
@@ -579,11 +581,8 @@ func (w *xlsxWalker) cell(d *xml.Decoder, el xml.StartElement, dep detect.Depth)
 
 	switch typ {
 	case "s":
-		// A shared string cell's v is an index into the table. An index that
-		// is not a number, or points outside the table, yields nothing rather
-		// than a value from somewhere else in the sheet.
-		i, err := strconv.Atoi(strings.TrimSpace(raw))
-		if err != nil || i < 0 || i >= len(w.sst) {
+		i, ok := sharedIndex(raw, len(w.sst))
+		if !ok {
 			return out, nil
 		}
 		out.text = w.sst[i]
@@ -641,6 +640,25 @@ func (w *xlsxWalker) chardata(d *xml.Decoder) error {
 		}
 	}
 	return nil
+}
+
+// sharedIndex resolves a shared string cell's stored value to a position in
+// the table.
+//
+// An index that is not a number, is negative, or points past the end of the
+// table resolves to nothing. It deliberately does not fall back to any other
+// entry: a cell whose index cannot be read has no value, and borrowing the
+// nearest one would put a figure from elsewhere in the sheet into the cell an
+// operator is about to approve (docs/rules.md §8.5).
+func sharedIndex(raw string, size int) (int, bool) {
+	i, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, false
+	}
+	if i < 0 || i >= size {
+		return 0, false
+	}
+	return i, true
 }
 
 // columnOf returns the zero-based column a cell reference names, or a value
