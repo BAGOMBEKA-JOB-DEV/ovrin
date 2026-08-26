@@ -276,6 +276,10 @@ func Extract[T any](ctx context.Context, c *Client, src Source, opts ...Option) 
 			Message: "the context had already ended"}).WithCause(err)
 	}
 
+	// Carry the hook so decorators that are not pipeline stages — a provider
+	// chain, a circuit breaker — can report what they did. See withHook.
+	ctx = withHook(ctx, cfg.hook)
+
 	// Reflection happens before a provider is contacted, so a malformed tag
 	// costs nothing at all.
 	sch, err := c.schema(reflect.TypeOf((*T)(nil)).Elem())
