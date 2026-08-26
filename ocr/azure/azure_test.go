@@ -142,12 +142,17 @@ func pageJSON(p fixPage, offset int) (encoded, content string, next int) {
 	return encoded, buf.String(), offset
 }
 
-// resultJSON renders a finished analysis.
+// resultJSONWith renders a finished analysis.
 //
 // The pages are emitted last page first, so that a fixture cannot be satisfied
 // by an adapter that hands back the order they arrived in: a caller reading
 // page three has no way to notice it was given page four.
-func resultJSON(pages []fixPage, locale string) string {
+//
+// model is the modelId the service echoes back, which is how a response says
+// which model ran and therefore whether structure was looked for at all;
+// structure is the "tables" and "keyValuePairs" members, written out as text so
+// that a fixture cannot be satisfied by the decoder it is decoded with.
+func resultJSONWith(pages []fixPage, locale, model, structure string) string {
 	encoded := make([]string, len(pages))
 	var content strings.Builder
 	offset := 0
@@ -168,9 +173,15 @@ func resultJSON(pages []fixPage, locale string) string {
 	return fmt.Sprintf(`{"status":"succeeded","createdDateTime":"2026-08-26T12:00:00Z",`+
 		`"lastUpdatedDateTime":"2026-08-26T12:00:03Z","analyzeResult":`+
 		`{"apiVersion":%q,"modelId":%q,"stringIndexType":"textElements","content":%q,`+
-		`"pages":[%s]%s,"styles":[],"paragraphs":[]}}`,
-		DefaultAPIVersion, DefaultModel, content.String(),
-		strings.Join(encoded, ","), languages)
+		`"pages":[%s]%s%s,"styles":[],"paragraphs":[]}}`,
+		DefaultAPIVersion, model, content.String(),
+		strings.Join(encoded, ","), languages, structure)
+}
+
+// resultJSON renders a finished analysis of the read model, which reports no
+// structure at all.
+func resultJSON(pages []fixPage, locale string) string {
+	return resultJSONWith(pages, locale, DefaultModel, "")
 }
 
 // The page fixture, measured in the pixels of the raster the page was sent as.
