@@ -1,0 +1,283 @@
+{
+  "generated": "2026-08-26T00:00:00Z",
+  "commit": "",
+  "model": "",
+  "ocr": "",
+  "reading": "",
+  "corpus": "eval/corpus",
+  "documents": 0,
+  "failures": 0,
+  "overall": {
+    "Exact": 0,
+    "Precision": 0,
+    "Recall": 0,
+    "Fabrication": 0,
+    "Tally": {
+      "Expected": 0,
+      "Absent": 0,
+      "Produced": 0,
+      "Correct": 0,
+      "Wrong": 0,
+      "Missed": 0,
+      "Fabricated": 0,
+      "Excluded": 0
+    }
+  },
+  "categories": null,
+  "calibration": {
+    "ECE": 0,
+    "Bins": [
+      {
+        "Low": 0,
+        "High": 0.1,
+        "Label": "0.0–0.1",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.1,
+        "High": 0.2,
+        "Label": "0.1–0.2",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.2,
+        "High": 0.3,
+        "Label": "0.2–0.3",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.3,
+        "High": 0.4,
+        "Label": "0.3–0.4",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.4,
+        "High": 0.5,
+        "Label": "0.4–0.5",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.5,
+        "High": 0.6,
+        "Label": "0.5–0.6",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.6,
+        "High": 0.7,
+        "Label": "0.6–0.7",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.7,
+        "High": 0.8,
+        "Label": "0.7–0.8",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.8,
+        "High": 0.9,
+        "Label": "0.8–0.9",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.9,
+        "High": 1,
+        "Label": "0.9–1.0",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      }
+    ],
+    "Bands": [
+      {
+        "Low": 0.9,
+        "High": 1,
+        "Label": "0.9–1.0",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0.7,
+        "High": 0.9,
+        "Label": "0.7–0.9",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      },
+      {
+        "Low": 0,
+        "High": 0.7,
+        "Label": "below 0.7",
+        "N": 0,
+        "Accuracy": 0,
+        "MeanConfidence": 0
+      }
+    ],
+    "Risk": [
+      {
+        "Threshold": 0,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.05,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.1,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.15,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.2,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.25,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.3,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.35,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.4,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.45,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.5,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.55,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.6,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.65,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.7,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.75,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.8,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.85,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.9,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 0.95,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      },
+      {
+        "Threshold": 1,
+        "Coverage": 0,
+        "Error": 0,
+        "N": 0
+      }
+    ],
+    "ReviewPrecision": 0,
+    "Flagged": 0,
+    "Scored": 0
+  },
+  "cost": {
+    "Documents": 0,
+    "Usage": {
+      "InputTokens": 0,
+      "OutputTokens": 0,
+      "PageUnits": 0
+    },
+    "Priced": false,
+    "USDPerDocument": 0,
+    "USDPerPage": 0,
+    "MedianLatency": 0,
+    "P95Latency": 0
+  },
+  "note": "No run has happened. Every figure below is a zero produced by the report renderer over an empty set of results, not a measurement. Nothing in this repository may cite it as an accuracy figure."
+}

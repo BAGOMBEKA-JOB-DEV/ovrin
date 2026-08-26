@@ -541,22 +541,23 @@ func lzwDecode(data []byte, earlyChange bool, s *sink) ([]byte, error) {
 		}
 		code := int(bitBuf>>(uint(bitCnt-width))) & ((1 << uint(width)) - 1)
 		bitCnt -= width
-		switch {
-		case code == eodCode:
+		switch code {
+		case eodCode:
 			return s.buf, nil
-		case code == clearCode:
+		case clearCode:
 			next = reset()
 			width = 9
 			prev = nil
 			continue
 		}
 		var entry []byte
-		switch {
-		case code < next && table[code] != nil:
-			entry = table[code]
-		case code == next && prev != nil:
+		if code == next && prev != nil {
+			// The one self-referential case the algorithm allows: the entry
+			// being defined by this very step.
 			entry = append(append([]byte{}, prev...), prev[0])
-		default:
+		} else if code < next && table[code] != nil {
+			entry = table[code]
+		} else {
 			// A code outside the table is a corrupt or hostile stream. What
 			// has been decoded so far is kept; guessing past it would invent
 			// content.

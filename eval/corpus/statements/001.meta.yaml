@@ -1,0 +1,14 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: clean-digital
+pages: 1
+language: en
+notes: |
+  A digital original with a real text layer. Four transactions, each with
+  exactly one of debit and credit filled in, and a running balance that
+  reconciles from the opening balance to the closing one.
+  
+  No IBAN — this is a domestic account and none is printed.

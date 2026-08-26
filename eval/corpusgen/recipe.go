@@ -47,15 +47,21 @@ func cleanDigital() recipe {
 	return recipe{kind: kindPDF, paper: officeWhite, ink: blackInk, steps: noSteps}
 }
 
-// goodScan is an office flatbed: square to within a degree, a little sensor
-// noise, a few specks of dust.
+// goodScan is an office flatbed: square to within a degree, the slight optical
+// softness a real platen has, a little sensor noise, a few specks of dust.
+//
+// The blur is not only realism. Uncorrelated noise is incompressible, and a
+// lossless scan of pure white noise costs the repository half a megabyte
+// forever; one blur pass correlates neighbouring pixels, which is both what a
+// lens does and what makes the file a quarter of the size.
 func goodScan() recipe {
 	return recipe{
 		kind: kindPNG, scale: 3, paper: scanCream, ink: blackInk,
 		steps: func(paper color.RGBA) []Degradation {
 			return []Degradation{
 				rotate(0.7, paper),
-				noise(3.5),
+				blur(1, 1),
+				noise(1.2),
 				speckle(60, 1),
 			}
 		},
@@ -70,7 +76,7 @@ func poorScan() recipe {
 		kind: kindJPEG, quality: 34, scale: 2, paper: scanCream, ink: fadedInk,
 		steps: func(paper color.RGBA) []Degradation {
 			return []Degradation{
-				rotate(-3.1, paper),
+				rotate(-1.8, paper),
 				contrast(0.58, 16),
 				blur(1, 1),
 				noise(9),
@@ -88,7 +94,7 @@ func fadedThermal() recipe {
 		kind: kindJPEG, quality: 40, scale: 3, paper: thermalGrey, ink: fadedInk,
 		steps: func(paper color.RGBA) []Degradation {
 			return []Degradation{
-				rotate(1.9, paper),
+				rotate(1.3, paper),
 				contrast(0.45, 24),
 				blur(1, 2),
 				noise(6),
@@ -108,7 +114,7 @@ func photograph() recipe {
 		steps: func(paper color.RGBA) []Degradation {
 			return []Degradation{
 				keystone(0.07, paper),
-				rotate(2.4, paper),
+				rotate(1.4, paper),
 				lighting(0.34),
 				warm(1.04, 0.99, 0.90),
 				downsample(1.5),

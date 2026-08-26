@@ -139,9 +139,10 @@ pkg ovrin, type CrossFieldRule interface, Name() string
 pkg ovrin, type CrossFields map[string]any
 pkg ovrin, type DateOrder string
 pkg ovrin, type Document struct
-pkg ovrin, type Document struct, Bytes int64
+pkg ovrin, type Document struct, Data []byte
 pkg ovrin, type Document struct, Kind Kind
 pkg ovrin, type Document struct, Pages int
+pkg ovrin, type Document struct, Size int64
 pkg ovrin, type DocumentOCR interface
 pkg ovrin, type DocumentOCR interface, Name() string
 pkg ovrin, type DocumentOCR interface, Recognise(context.Context, Page) (*Recognition, error)

@@ -102,7 +102,8 @@ func writePDF(body []string) []byte {
 
 // paginate splits a body into pages that fit inside the margins.
 func paginate(body []string) [][]string {
-	perPage := int((pageHeight - 2*pdfMargin) / pdfLeading)
+	usable := pageHeight - 2*pdfMargin
+	perPage := int(usable / pdfLeading)
 	if perPage < 1 {
 		perPage = 1
 	}

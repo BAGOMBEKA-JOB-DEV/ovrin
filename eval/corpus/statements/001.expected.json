@@ -1,0 +1,36 @@
+{
+  "account": "0142200987651",
+  "account_name": "Ocen Grain Millers Ltd",
+  "bank": "Victoria Commercial Bank",
+  "currency": "UGX",
+  "period_start": "2026-02-01",
+  "period_end": "2026-02-28",
+  "opening": 4120000,
+  "closing": 4090000,
+  "transactions": [
+    {
+      "date": "2026-02-04",
+      "description": "Deposit - maize sales",
+      "credit": 890000,
+      "balance": 5010000
+    },
+    {
+      "date": "2026-02-09",
+      "description": "Cheque 004412 - fuel",
+      "debit": 310000,
+      "balance": 4700000
+    },
+    {
+      "date": "2026-02-17",
+      "description": "Transfer to payroll",
+      "debit": 1250000,
+      "balance": 3450000
+    },
+    {
+      "date": "2026-02-25",
+      "description": "Deposit - flour sales",
+      "credit": 640000,
+      "balance": 4090000
+    }
+  ]
+}

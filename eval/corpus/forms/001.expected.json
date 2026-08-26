@@ -1,0 +1,18 @@
+{
+  "reference": "DTL-2026-004512",
+  "received": "2026-03-11",
+  "applicant": {
+    "name": "Miriam Nakato Ssebugwawo",
+    "phone": "+256772445118",
+    "email": "miriam.nakato@example.org",
+    "address": "P.O. Box 3391, Kampala"
+  },
+  "business": "Nakato Tailoring Works",
+  "activity": "Tailoring and garment repair",
+  "district": "Kampala",
+  "employees": 7,
+  "fee_paid": 120000,
+  "renewal": true,
+  "tax_cleared": true,
+  "declaration": "Miriam Nakato Ssebugwawo"
+}

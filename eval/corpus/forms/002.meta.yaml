@@ -1,0 +1,16 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: clean-digital
+pages: 1
+language: en
+notes: |
+  Clean digital, deliberately incomplete: no email, no fee, and the form is
+  unsigned. Those three fields are absent from ground truth.
+  
+  Both boxes in Section C are answered, and both answers are false. That is
+  the distinction this document exists to test: "the box is empty" and "we
+  could not read the box" are different results, and only one of them is a
+  value.

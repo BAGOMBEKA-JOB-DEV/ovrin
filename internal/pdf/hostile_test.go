@@ -120,10 +120,12 @@ func TestUnsupportedFilterIsRefusedByName(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Open: %v", err)
 			}
-			_, err = doc.Page(1)
-			// The content stream is unreadable, so the page is empty rather
-			// than an error — but asking the stream itself must name the
-			// filter.
+			// A page whose only content stream cannot be decoded is an empty
+			// page rather than a failed extraction, so it is the stream that
+			// has to name the filter.
+			if p, perr := doc.Page(1); perr == nil && len(p.Content.Words) != 0 {
+				t.Errorf("page produced %d words from an undecodable stream", len(p.Content.Words))
+			}
 			st, ok := doc.object(4, doc.lim.Depth()).(*Stream)
 			if !ok {
 				t.Fatalf("object 4 is not a stream")

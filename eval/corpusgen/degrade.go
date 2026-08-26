@@ -294,3 +294,18 @@ func apply(src *image.RGBA, rng *rand.Rand, ds ...Degradation) *image.RGBA {
 	}
 	return src
 }
+
+// greyscale converts a rendering to a single channel, using the Rec. 601
+// luma weights that every scanner and every camera applies.
+func greyscale(src *image.RGBA) *image.Gray {
+	b := src.Bounds()
+	dst := image.NewGray(b)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			c := src.RGBAAt(x, y)
+			v := 0.299*float64(c.R) + 0.587*float64(c.G) + 0.114*float64(c.B)
+			dst.SetGray(x, y, color.Gray{Y: clamp(v)})
+		}
+	}
+	return dst
+}

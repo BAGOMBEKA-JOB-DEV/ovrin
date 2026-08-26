@@ -208,13 +208,14 @@ func judge(c Case) []judgement {
 			all = append(all, k)
 		}
 	}
-	for k, f := range c.Observation.Fields {
-		// A field the extraction reports as not found contributes nothing on
-		// its own. It is a miss only if ground truth expected it, and the loop
-		// above already has that key.
-		if !f.Found {
-			continue
-		}
+	for k := range c.Observation.Fields {
+		// Every schema field is here, including the ones the extraction
+		// reported as absent, and that is deliberate. A field with no ground
+		// truth that no value was produced for is a correct absence, and it
+		// belongs in the fabrication denominator: fabrication rate is
+		// fabrications over opportunities to fabricate, and dropping the
+		// opportunities the extractor declined would report a worse rate the
+		// better it behaved.
 		if !seen[k] {
 			seen[k] = true
 			all = append(all, k)

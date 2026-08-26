@@ -239,11 +239,17 @@ func OCRPage() ovrin.Page {
 }
 
 // ocrDocument is the document the DocumentOCR assertions send.
+//
+// Data carries DocumentCanary, so an adapter that reads the document reads the
+// canary and an adapter that ignores Data and reaches for bytes it was given
+// some other way is visible. ovrin.Document gained Data precisely because a
+// DocumentOCR could not otherwise reach what it was asked to read.
 func (s OCRSuite) ocrDocument() ovrin.Document {
 	return ovrin.Document{
 		Kind:  ovrin.KindPDF,
 		Pages: len(s.WantDocument),
-		Bytes: int64(len(DocumentCanary)),
+		Size:  int64(len(DocumentCanary)),
+		Data:  []byte(DocumentCanary),
 	}
 }
 
@@ -619,11 +625,16 @@ func (s OCRSuite) serveDocument(t *testing.T, answer func(raw []byte) (int, stri
 func (s OCRSuite) testName(t *testing.T) {
 	o, _ := s.serveOCR(t, http.StatusOK, s.SuccessBody)
 
-	if got := o.Name(); got != s.ProviderName {
+	got := o.Name()
+	if got != s.ProviderName {
 		t.Errorf("Name() = %q, want %q", got, s.ProviderName)
 	}
-	if o.Name() != o.Name() {
-		t.Error("Name() is not stable across calls")
+	// Called a second time deliberately. A name that changes between calls
+	// makes [ovrin.Provenance.Method] unreproducible, and two results from one
+	// provider then look like results from two.
+	if again := o.Name(); again != got {
+		t.Errorf("Name() = %q and then %q; it must not change between calls",
+			got, again)
 	}
 }
 

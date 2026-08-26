@@ -298,11 +298,14 @@ const (
     YearFirst        DateOrder = "ymd"
 )
 
-// Document is a Source whose format has been identified.
+// Document is a Source whose format has been identified. Data is the document
+// itself: a Renderer and a DocumentOCR are asked to read it, so they must be
+// able to reach it.
 type Document struct {
     Kind  Kind
     Pages int
-    Bytes int64
+    Size  int64
+    Data  []byte
 }
 
 // Page is one rasterised page, handed to an OCR provider.

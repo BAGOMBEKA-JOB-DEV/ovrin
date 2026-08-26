@@ -1,0 +1,14 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: poor-scan
+pages: 1
+language: en
+notes: |
+  The machine in the corridor: skewed 1.8 degrees, contrast cut to 0.58 with
+  the black point lifted, one blur pass, noise at sigma 9, four hundred and
+  twenty two-pixel specks, then JPEG at quality 34. Some of the specks land
+  on glyphs. Rendered at half the scale of the good scan as well, so there
+  are fewer pixels per stroke to begin with.

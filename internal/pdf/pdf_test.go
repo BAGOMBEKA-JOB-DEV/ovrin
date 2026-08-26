@@ -469,3 +469,43 @@ func TestMetadata(t *testing.T) {
 		t.Errorf("meta[1] = %+v, want the UTF-16BE string decoded", meta[1])
 	}
 }
+
+func TestGraphicsStateScalesText(t *testing.T) {
+	t.Parallel()
+	// A cm that doubles the coordinate system, with half the font size and
+	// half the offsets, must place the text exactly where the unscaled
+	// version does. Generators reach for cm constantly — LaTeX and Chrome
+	// both do — so getting the matrix order wrong misplaces every box on
+	// every page while the text still looks right.
+	plain := openPage(t, onePage("BT /F1 12 Tf 72 720 Td (Hi) Tj ET", helvetica, ""))
+	scaled := openPage(t, onePage("q 2 0 0 2 0 0 cm BT /F1 6 Tf 36 360 Td (Hi) Tj ET Q", helvetica, ""))
+	if len(plain.Content.Words) != 1 || len(scaled.Content.Words) != 1 {
+		t.Fatalf("got %q and %q, want one word each", words(plain), words(scaled))
+	}
+	a, b := plain.Content.Words[0].Box, scaled.Content.Words[0].Box
+	for _, c := range []struct {
+		name string
+		a, b float64
+	}{
+		{"MinX", a.MinX, b.MinX}, {"MinY", a.MinY, b.MinY},
+		{"MaxX", a.MaxX, b.MaxX}, {"MaxY", a.MaxY, b.MaxY},
+	} {
+		if d := c.a - c.b; d > 0.01 || d < -0.01 {
+			t.Errorf("%s = %v scaled, %v plain", c.name, c.b, c.a)
+		}
+	}
+}
+
+func TestGraphicsStateIsRestored(t *testing.T) {
+	t.Parallel()
+	// Q must undo the cm, or every word after a restored block is misplaced.
+	content := "q 4 0 0 4 0 0 cm Q BT /F1 12 Tf 72 720 Td (Hi) Tj ET"
+	restored := openPage(t, onePage(content, helvetica, ""))
+	plain := openPage(t, onePage("BT /F1 12 Tf 72 720 Td (Hi) Tj ET", helvetica, ""))
+	if len(restored.Content.Words) != 1 {
+		t.Fatalf("got %q, want one word", words(restored))
+	}
+	if d := restored.Content.Words[0].Box.MinX - plain.Content.Words[0].Box.MinX; d > 0.01 || d < -0.01 {
+		t.Errorf("MinX = %v after Q, want %v", restored.Content.Words[0].Box.MinX, plain.Content.Words[0].Box.MinX)
+	}
+}

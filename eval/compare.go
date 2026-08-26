@@ -2,6 +2,7 @@ package eval
 
 import (
 	"encoding/json"
+	"math"
 	"math/big"
 	"reflect"
 	"sort"
@@ -54,10 +55,23 @@ func Equal(want, got any) bool {
 	// as strings even if both happen to parse: an invoice number "007" is not
 	// the invoice number "7", and the schema, not the characters, is what says
 	// which a field is.
-	wn, wIsNum := asRat(want)
-	gn, gIsNum := asRat(got)
 	if nativeNumber(want) || nativeNumber(got) {
-		return wIsNum && gIsNum && wn.Cmp(gn) == 0
+		wn, wok := asRat(want)
+		gn, gok := asRat(got)
+		if !wok || !gok {
+			return false
+		}
+		if isFloat(want) || isFloat(got) {
+			// A float64 cannot hold 18430.55, so an exact rational comparison
+			// against the decimal a labeller wrote would report a failure that
+			// is the comparison's own rounding rather than the extractor's
+			// mistake. Where one side has already been through binary floating
+			// point, both sides are compared there.
+			wf, _ := wn.Float64()
+			gf, _ := gn.Float64()
+			return nearlyEqual(wf, gf)
+		}
+		return wn.Cmp(gn) == 0
 	}
 
 	if ws, ok := want.([]any); ok {
@@ -82,6 +96,31 @@ func Equal(want, got any) bool {
 		return false
 	}
 	return fold(ws) == fold(gs)
+}
+
+// isFloat reports whether v arrived as a binary floating-point value, and so
+// has already lost whatever decimal digits it could not represent.
+func isFloat(v any) bool {
+	switch v.(type) {
+	case float32, float64:
+		return true
+	}
+	return false
+}
+
+// nearlyEqual compares two float64 values with a relative tolerance.
+//
+// The tolerance is nine significant figures, which is far tighter than any
+// document's precision and far looser than the last bit of a float64. A
+// difference this survives is a rounding artefact; a difference it does not is
+// a misread digit.
+func nearlyEqual(a, b float64) bool {
+	if a == b {
+		return true
+	}
+	diff := math.Abs(a - b)
+	scale := math.Max(math.Abs(a), math.Abs(b))
+	return diff <= math.Max(1e-9, 1e-9*scale)
 }
 
 // nativeNumber reports whether v arrived as a number rather than as text.

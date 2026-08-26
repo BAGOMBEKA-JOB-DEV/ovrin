@@ -203,7 +203,13 @@ func draw(d document) (data []byte, ext string, pages int, err error) {
 	var buf bytes.Buffer
 	switch r.kind {
 	case kindPNG:
-		if err := png.Encode(&buf, img); err != nil {
+		// Greyscale and maximum compression, because a scanner produces
+		// greyscale and because ADR-0023 notes that documents in git are
+		// binary blobs that inflate the repository permanently. Storing a
+		// noisy scan as RGB costs three times the bytes to encode the same
+		// information, forever.
+		enc := png.Encoder{CompressionLevel: png.BestCompression}
+		if err := enc.Encode(&buf, greyscale(img)); err != nil {
 			return nil, "", 0, err
 		}
 		return buf.Bytes(), ".png", 1, nil

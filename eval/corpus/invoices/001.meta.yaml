@@ -1,0 +1,12 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: clean-digital
+pages: 1
+language: en
+notes: |
+  A digital original with a real text layer, every optional field present.
+  This is the easiest document in the corpus and its score is a ceiling
+  rather than an expectation.

@@ -1,0 +1,34 @@
+{
+  "number": "BH-4471",
+  "issued": "2026-02-09",
+  "vendor": {
+    "name": "Bugolobi Hardware & Tools",
+    "address": "Plot 3 Luthuli Avenue, Kampala"
+  },
+  "bill_to": {
+    "name": "Sanyu Construction Co",
+    "address": "Plot 22 Ntinda Road, Kampala"
+  },
+  "currency": "UGX",
+  "total": 3915000,
+  "items": [
+    {
+      "description": "Cement 50kg bag",
+      "quantity": 60,
+      "unit_price": 38000,
+      "amount": 2280000
+    },
+    {
+      "description": "Wheelbarrow heavy duty",
+      "quantity": 3,
+      "unit_price": 195000,
+      "amount": 585000
+    },
+    {
+      "description": "Steel bar 12mm 6m",
+      "quantity": 25,
+      "unit_price": 42000,
+      "amount": 1050000
+    }
+  ]
+}

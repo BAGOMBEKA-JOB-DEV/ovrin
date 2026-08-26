@@ -252,6 +252,7 @@ func ParseMeta(s string) (Meta, error) {
 	var block []string
 	var inBlock bool
 	var blockIndent int
+	var bodyIndent int
 
 	flush := func() error {
 		if !inBlock {
@@ -279,7 +280,14 @@ func ParseMeta(s string) (Meta, error) {
 				continue
 			}
 			if indent > blockIndent {
-				block = append(block, line[blockIndent+1:])
+				if bodyIndent == 0 {
+					bodyIndent = indent
+				}
+				strip := bodyIndent
+				if strip > len(line) {
+					strip = len(line)
+				}
+				block = append(block, line[strip:])
 				continue
 			}
 			if err := flush(); err != nil {
@@ -316,7 +324,7 @@ func ParseMeta(s string) (Meta, error) {
 		key = strings.TrimSpace(k)
 		v = strings.TrimSpace(v)
 		if v == "|" || v == ">" || v == "|-" || v == ">-" {
-			inBlock, blockIndent, block = true, indent, nil
+			inBlock, blockIndent, bodyIndent, block = true, indent, 0, nil
 			continue
 		}
 		if v == "" {
@@ -336,11 +344,16 @@ func ParseMeta(s string) (Meta, error) {
 	return m, nil
 }
 
-// stripComment removes a trailing comment. It requires whitespace before the
-// '#' so that a value containing one — a hash in a document reference — is not
-// truncated. docs/evaluation.md's example annotates `difficulty:` this way.
+// stripComment removes a trailing comment.
+//
+// It requires two spaces before the '#', which is a heuristic and is stated as
+// one. Real YAML needs only one, but a value containing a hash is far more
+// common in these files than a comment set one space from its value — "order
+// #4471" is a document reference and "poor-scan        # clean-digital | …" is
+// the annotation docs/evaluation.md puts on its own example. Two spaces
+// separates them without a quoting rule this parser does not implement.
 func stripComment(v string) string {
-	if i := strings.Index(v, " #"); i >= 0 {
+	if i := strings.Index(v, "  #"); i >= 0 {
 		return strings.TrimSpace(v[:i])
 	}
 	return v

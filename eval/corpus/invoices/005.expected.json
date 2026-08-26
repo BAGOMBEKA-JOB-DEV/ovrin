@@ -1,0 +1,29 @@
+{
+  "number": "GPW-0331",
+  "issued": "2026-05-09",
+  "due": "2026-06-08",
+  "vendor": {
+    "name": "GULU PRINT WORKS",
+    "address": "PLOT 2 LABWORO ROAD, GULU"
+  },
+  "bill_to": {
+    "name": "ACHOLI HERITAGE TRUST",
+    "address": "P.O. BOX 190, GULU"
+  },
+  "currency": "UGX",
+  "total": 2180000,
+  "items": [
+    {
+      "description": "A5 BOOKLET 24PP",
+      "quantity": 500,
+      "unit_price": 3200,
+      "amount": 1600000
+    },
+    {
+      "description": "BANNER 3M X 1M",
+      "quantity": 4,
+      "unit_price": 145000,
+      "amount": 580000
+    }
+  ]
+}

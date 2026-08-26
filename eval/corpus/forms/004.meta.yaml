@@ -1,0 +1,17 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: poor-scan
+pages: 1
+language: en
+notes: |
+  The machine in the corridor: skewed 1.8 degrees, contrast at 0.58, one
+  blur pass, noise at sigma 9, four hundred and twenty specks, JPEG quality
+  34, at half the scale of a good scan. The tick boxes are two characters
+  wide and this is where they become genuinely hard to read.
+  
+  The signature is initialled "P. M. BYARUHANGA" while the applicant is
+  named in full, so declaration and applicant.name are different strings and
+  an extractor that copies one into the other is wrong.

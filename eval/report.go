@@ -282,7 +282,7 @@ func (r *Report) Text() string {
 		fmt.Fprintf(&b, "  auto-accept at %.2f       coverage %.2f  error %.2f\n",
 			t, p.Coverage, p.Error)
 	}
-	if len(r.Calibration.Risk) > 0 {
+	if r.Calibration.Scored > 0 {
 		b.WriteString("\n  risk-coverage\n")
 		b.WriteString("    threshold  coverage  error  n\n")
 		for _, p := range r.Calibration.Risk {

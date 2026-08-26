@@ -1,0 +1,18 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: multi-column
+pages: 1
+language: en
+notes: |
+  A digital original laid out in two columns, which is the difficulty here:
+  reading order. A reader that takes the page line by line across the full
+  width will interleave Section A with Section C and pair the wrong label
+  with the wrong value.
+  
+  The form is unsigned, so declaration is absent. The office-use column
+  carries a zone, an officer code and a stamp, none of which is a field of
+  the schema; an extractor that puts "insp-22" in declaration has
+  fabricated.

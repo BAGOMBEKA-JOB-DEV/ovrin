@@ -1,0 +1,11 @@
+{
+  "number": "ERP-55219",
+  "vendor": "ENTEBBE ROAD PHARMACY",
+  "issued": "2026-04-14",
+  "currency": "UGX",
+  "subtotal": 22700,
+  "tax": 4086,
+  "total": 26786,
+  "method": "mobile-money",
+  "cashier": "A. OKELLO"
+}

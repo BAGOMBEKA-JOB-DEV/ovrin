@@ -104,8 +104,7 @@ type gstate struct {
 // every operator reads or writes the same six things, and threading them would
 // mean an argument list nobody reads.
 type interp struct {
-	doc  *Doc
-	page int
+	doc *Doc
 
 	gs    gstate
 	stack []gstate
@@ -133,10 +132,9 @@ type interp struct {
 }
 
 // newInterp returns an interpreter for one page.
-func newInterp(d *Doc, page int) *interp {
+func newInterp(d *Doc) *interp {
 	return &interp{
 		doc:   d,
-		page:  page,
 		gs:    gstate{ctm: identityMatrix, ts: textState{hscale: 1}},
 		tm:    identityMatrix,
 		tlm:   identityMatrix,
@@ -161,12 +159,18 @@ func (ip *interp) runContent(content []byte, res Dict, dp detect.Depth) {
 		if ip.err != nil {
 			return
 		}
+		before := l.pos
 		o, perr := l.object(dp)
 		if perr != nil {
-			// The lexer always advances past what it could not read, so
-			// dropping the operands and carrying on terminates and recovers
-			// the rest of the page.
+			// Dropping the operands and carrying on recovers the rest of a
+			// page whose content stream has one bad object in it. It is only
+			// safe while the lexer advances: an object that failed before
+			// consuming anything — a depth budget already spent — would
+			// otherwise be retried for ever, so that case stops instead.
 			ops = ops[:0]
+			if l.pos <= before {
+				return
+			}
 			continue
 		}
 		op, isOp := o.(operator)

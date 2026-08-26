@@ -350,3 +350,77 @@ func names(signals []ovrin.Signal) []string {
 }
 
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
+
+// docOCR accepts a whole document and rasterises it itself, as the cloud
+// providers do.
+type docOCR struct{ pages [][]string }
+
+func (docOCR) Name() string { return "doc-test" }
+
+func (o docOCR) Recognise(context.Context, ovrin.Page) (*ovrin.Recognition, error) {
+	return nil, ovrin.ErrUnsupported
+}
+
+func (o docOCR) RecogniseDocument(_ context.Context, doc ovrin.Document) ([]*ovrin.Recognition, error) {
+	// The point of the whole exercise: a DocumentOCR must be able to reach the
+	// bytes it was asked to read. An earlier Document carried only metadata,
+	// which made this seam unimplementable.
+	if len(doc.Data) == 0 {
+		return nil, errors.New("the document carried no content")
+	}
+	out := make([]*ovrin.Recognition, 0, len(o.pages))
+	for _, words := range o.pages {
+		rec := &ovrin.Recognition{Confidence: 0.93}
+		x := 10.0
+		for _, w := range words {
+			rec.Words = append(rec.Words, ovrin.Word{
+				Text: w, Confidence: 0.93,
+				Box: ovrin.Rect{MinX: x, MinY: 20, MaxX: x + 30, MaxY: 32},
+			})
+			x += 35
+		}
+		out = append(out, rec)
+	}
+	return out, nil
+}
+
+// A DocumentOCR provider is what lets a scanned document be read with no local
+// renderer at all — the route ADR-0010 relies on while render/pdfium does not
+// exist. It is preferred over the per-page path, and it must receive the
+// document's bytes.
+func TestDocumentOCRIsPreferredAndReceivesTheBytes(t *testing.T) {
+	t.Parallel()
+
+	type Doc struct {
+		Vendor string `ovrin:"vendor name,required"`
+	}
+
+	c := ovrin.New(
+		ovrin.WithModel(replyModel{reply: map[string]any{"vendor": "Kampala Supplies"}}),
+		ovrin.WithOCR(docOCR{pages: [][]string{
+			{"Kampala", "Supplies"},
+			{"Page", "Two"},
+		}}),
+	)
+
+	res, err := ovrin.Extract[Doc](context.Background(), c, ovrin.Bytes(testPNG()))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if res.Data.Vendor != "Kampala Supplies" {
+		t.Errorf("Vendor = %q", res.Data.Vendor)
+	}
+	if got := res.Metadata.Pages; got != 2 {
+		t.Errorf("Pages = %d, want 2 — the whole document should have been read", got)
+	}
+	if got := res.Metadata.Providers[ovrin.OpOCR]; got != "doc-test" {
+		t.Errorf("the OCR provider recorded is %q, want doc-test", got)
+	}
+
+	// Text came back, so grounding applies — which is the reason to prefer an
+	// OCR reading over vision in the first place.
+	f := res.Fields["vendor"]
+	if !hasSignal(f.Signals, ovrin.SignalGrounding) {
+		t.Errorf("no grounding signal although an OCR reading produced source text; signals: %v", names(f.Signals))
+	}
+}

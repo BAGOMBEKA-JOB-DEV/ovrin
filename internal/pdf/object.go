@@ -271,7 +271,8 @@ func (l *lexer) hexString() String {
 	return b
 }
 
-// number reads an integer or a real.
+// number reads an integer or a real, or returns null when there is no number
+// at the current position.
 //
 // PDF in the wild contains numbers no grammar admits — "--3", "3.4.5", a lone
 // full stop — and refusing the file over one of them loses a document that
@@ -285,10 +286,18 @@ func (l *lexer) number() Object {
 		c := l.data[l.pos]
 		if c == '.' {
 			real = true
-		} else if !(c >= '0' && c <= '9') && c != '+' && c != '-' {
+		} else if (c < '0' || c > '9') && c != '+' && c != '-' {
 			break
 		}
 		l.pos++
+	}
+	if l.pos == start {
+		// Nothing was consumed, so there was no number here. Returning zero
+		// would be a value the document never wrote, and — worse — it would
+		// let a caller loop asking for a number at a position that never
+		// advances. Null is the honest answer and every caller already
+		// handles it (docs/threat-model.md T3).
+		return nil
 	}
 	tok := string(l.data[start:l.pos])
 	if !real {

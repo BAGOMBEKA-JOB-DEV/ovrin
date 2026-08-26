@@ -374,7 +374,7 @@ func (d *Doc) Page(n int) (page Page, err error) {
 	if cerr != nil {
 		d.note(cerr)
 	}
-	ip := newInterp(d, n)
+	ip := newInterp(d)
 	ip.runContent(content, e.resources, dp)
 	ip.flushWord()
 	if ip.err != nil {
@@ -463,7 +463,14 @@ func toTopLeft(r run, x0, y0, x1, y1 float64, rotate int) normalise.Rect {
 // Only the six standard keys are returned. A document chooses its own keys,
 // and a finding prints the key, so an arbitrary one would put document bytes
 // in a log (docs/rules.md §7.5).
-func (d *Doc) Metadata() []normalise.Meta {
+func (d *Doc) Metadata() (meta []normalise.Meta) {
+	// As in [Doc.Page]: a panic is a bug in this package and must not become
+	// a crash in the calling service (docs/threat-model.md T3).
+	defer func() {
+		if r := recover(); r != nil {
+			meta = nil
+		}
+	}()
 	info, ok := d.resolveShallow(d.trailer["Info"]).(Dict)
 	if !ok {
 		return nil

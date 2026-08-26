@@ -76,20 +76,23 @@ func identityCMap() *cmap {
 func parseCMap(data []byte, dp detect.Depth) *cmap {
 	c := &cmap{single: map[uint32]string{}, cids: map[uint32]int{}}
 	l := &lexer{data: data}
-	var stack []Object
 	for !l.atEOF() {
+		before := l.pos
 		o, err := l.object(dp)
 		if err != nil {
-			// A malformed object cannot be skipped meaningfully, but the
-			// lexer always advances, so this terminates.
-			stack = stack[:0]
+			// An object that failed without consuming anything — an
+			// exhausted depth budget — would be retried for ever.
+			if l.pos <= before {
+				return c
+			}
 			continue
 		}
 		op, isOp := o.(operator)
 		if !isOp {
-			if len(stack) < 8 {
-				stack = append(stack, o)
-			}
+			// Operands before a section keyword are the counts the file
+			// declares, and they are deliberately dropped: each section is
+			// read until its end keyword, so a count that disagrees with the
+			// content cannot make the reader believe there is more of it.
 			continue
 		}
 		switch op {
@@ -104,7 +107,6 @@ func parseCMap(data []byte, dp detect.Depth) *cmap {
 		case "begincidrange":
 			c.readCIDRanges(l, dp)
 		}
-		stack = stack[:0]
 	}
 	if len(c.spaces) == 0 {
 		c.spaces = c.inferCodespaces()
@@ -145,8 +147,9 @@ func (c *cmap) inferCodespaces() []codespace {
 // already bounded.
 func section(l *lexer, dp detect.Depth, end operator, fn func(Object) bool) {
 	for !l.atEOF() {
+		before := l.pos
 		o, err := l.object(dp)
-		if err != nil {
+		if err != nil || l.pos <= before {
 			return
 		}
 		if op, ok := o.(operator); ok {

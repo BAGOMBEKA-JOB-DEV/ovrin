@@ -261,6 +261,7 @@ func (d *Doc) readXrefTable(l *lexer) (Dict, []int64, error) {
 		if l.peekKeyword() == "trailer" {
 			break
 		}
+		before := l.pos
 		first, ok := l.number().(Integer)
 		if !ok {
 			return nil, nil, malformed("xref", 0, "cross-reference subsection has no first object number")
@@ -275,6 +276,9 @@ func (d *Doc) readXrefTable(l *lexer) (Dict, []int64, error) {
 		// before any of them happens.
 		if err := d.lim.CheckObjects(len(d.xref) + int(count)); err != nil {
 			return nil, nil, err
+		}
+		if l.pos == before {
+			return nil, nil, malformed("xref", 0, "cross-reference subsection header made no progress")
 		}
 		for i := int64(0); i < int64(count); i++ {
 			l.skipSpace()
@@ -434,6 +438,7 @@ func (d *Doc) reconstruct() error {
 	if d.trailer == nil {
 		d.trailer = Dict{}
 	}
+	d.scanTrailers()
 	if d.trailer["Root"] == nil {
 		d.trailer["Root"] = d.findRoot()
 	}
@@ -441,6 +446,42 @@ func (d *Doc) reconstruct() error {
 		return malformed("xref", 0, "no document catalog found")
 	}
 	return nil
+}
+
+// scanTrailers merges the dictionaries of every trailer keyword in the file,
+// last one first.
+//
+// It matters most for encryption. A document whose cross-reference chain is
+// broken still has its /Encrypt in a trailer somewhere, and without this the
+// document would be read as though it were plaintext — producing decoded
+// nonsense instead of the refusal ADR-0011 requires
+// (docs/adr/0011-pdf-text-extraction.md).
+func (d *Doc) scanTrailers() {
+	const maxTrailers = 64
+	for i, n := len(d.data), 0; n < maxTrailers; n++ {
+		j := bytes.LastIndex(d.data[:i], []byte("trailer"))
+		if j < 0 {
+			return
+		}
+		i = j
+		l := &lexer{data: d.data, pos: j + len("trailer")}
+		dict, ok := func() (Dict, bool) {
+			o, err := l.object(d.lim.Depth())
+			if err != nil {
+				return nil, false
+			}
+			v, ok := o.(Dict)
+			return v, ok
+		}()
+		if !ok {
+			continue
+		}
+		for k, v := range dict {
+			if _, have := d.trailer[k]; !have {
+				d.trailer[k] = v
+			}
+		}
+	}
 }
 
 // buildScan indexes every "n g obj" header in the file, once.
@@ -628,6 +669,13 @@ func (d *Doc) objectAt(off, num int, dp detect.Depth) Object {
 		return nil
 	}
 	o, got, err := d.parseIndirectAt(off, dp)
+	if err != nil {
+		// A parse failure resolves to null so that one damaged object does
+		// not lose the document — but a limit failure is not damage, it is an
+		// attacker spending our budget, and it is recorded rather than
+		// shrugged off.
+		d.note(err)
+	}
 	if err != nil || got != num {
 		// Some generators write offsets relative to the %PDF- header rather
 		// than to the start of the file. One retry, at that origin.
@@ -799,8 +847,8 @@ func (d *Doc) loadObjStm(num int, dp detect.Depth) *objStm {
 	}
 	// Each pair is at least three bytes ("0 0 "), so a stream that could not
 	// hold N pairs never allocates for N of them.
-	if n > int64(first)/3+1 {
-		n = int64(first)/3 + 1
+	if n > first/3+1 {
+		n = first/3 + 1
 	}
 	stm := &objStm{data: data}
 	l := &lexer{data: data[:first], pos: 0}

@@ -134,12 +134,12 @@ func stageDetect(ctx context.Context, cfg *config, src Source, meta *Metadata) (
 		return nil, Document{}, classify(OpDetect, "", err)
 	}
 
-	doc := Document{Kind: Kind(kind), Bytes: int64(len(data))}
+	doc := Document{Kind: Kind(kind), Size: int64(len(data)), Data: data}
 	if doc.Kind == KindPNG || doc.Kind == KindJPEG || doc.Kind == KindWebP {
 		doc.Pages = 1
 	}
 	meta.Kind = doc.Kind
-	cfg.emit(ctx, Event{Op: OpDetect, Duration: time.Since(start), Bytes: doc.Bytes, Pages: doc.Pages})
+	cfg.emit(ctx, Event{Op: OpDetect, Duration: time.Since(start), Bytes: doc.Size, Pages: doc.Pages})
 	return data, doc, nil
 }
 
@@ -168,6 +168,24 @@ func stageAcquire(ctx context.Context, cfg *config, data []byte, doc Document, m
 		return nil, classify(OpAcquire, "", err)
 	}
 
+	// A provider that accepts the whole document rasterises server-side, which
+	// is what lets a scanned document be read with no local renderer at all —
+	// the route ADR-0010 relies on while render/pdfium does not exist. Prefer
+	// it: it is one call rather than one per page, and it sees the document
+	// rather than an image we chose the resolution of.
+	if d, ok := cfg.ocr.(DocumentOCR); ok && cfg.reading != ModeVision {
+		rd, err := acquireByDocumentOCR(ctx, cfg, d, doc, meta, start)
+		if err == nil {
+			return rd, nil
+		}
+		// ErrUnsupported here means the provider cannot take this format
+		// whole. That is not a failure: fall through to the per-page path
+		// rather than refusing a document another route can read.
+		if !errors.Is(err, ErrUnsupported) {
+			return nil, err
+		}
+	}
+
 	// An OCR provider gives text, and text is what grounding needs. Prefer it
 	// over vision for that reason alone: a vision reading produces no source
 	// text, so a value cannot be checked against the document it came from.
@@ -189,7 +207,7 @@ func stageAcquire(ctx context.Context, cfg *config, data []byte, doc Document, m
 
 	cfg.emit(ctx, Event{Op: OpAcquire, Page: 1, Duration: time.Since(start), Pages: 1})
 	return &reading{
-		doc:   Document{Kind: doc.Kind, Pages: 1, Bytes: doc.Bytes},
+		doc:   Document{Kind: doc.Kind, Pages: 1, Size: doc.Size, Data: doc.Data},
 		kinds: []Reading{ReadingVision},
 		pages: []prompt.PageContent{{
 			Number:    1,
@@ -198,6 +216,85 @@ func stageAcquire(ctx context.Context, cfg *config, data []byte, doc Document, m
 			MediaType: mediaTypeOf(doc.Kind),
 		}},
 	}, nil
+}
+
+// acquireByDocumentOCR hands the whole document to a provider that rasterises
+// it itself.
+func acquireByDocumentOCR(ctx context.Context, cfg *config, d DocumentOCR, doc Document, meta *Metadata, start time.Time) (*reading, error) {
+	recs, err := d.RecogniseDocument(ctx, doc)
+	name := d.Name()
+	cfg.emit(ctx, Event{Op: OpOCR, Provider: name, Duration: time.Since(start), Pages: len(recs), Err: err})
+	if err != nil {
+		return nil, classify(OpOCR, name, err)
+	}
+	if len(recs) == 0 {
+		return nil, &Error{Op: OpOCR, Provider: name, Kind: ErrNoContent,
+			Message: "the provider returned no pages"}
+	}
+	meta.Providers[OpOCR] = name
+
+	pages := make([]normalise.Page, 0, len(recs))
+	for i, rec := range recs {
+		if rec == nil {
+			continue
+		}
+		pages = append(pages, normalisePage(i+1, 0, 0, rec))
+	}
+
+	nStart := time.Now()
+	res := normalise.Normalise(normalise.Input{Pages: pages})
+	cfg.emit(ctx, Event{Op: OpNormalise, Duration: time.Since(nStart), Bytes: int64(len(res.Text))})
+
+	if int64(len(res.Text)) > cfg.maxTextBytes {
+		return nil, &Error{Op: OpNormalise, Kind: ErrLimitExceeded,
+			Message: "extracted text exceeds the limit, raise with WithMaxTextBytes"}
+	}
+
+	kinds := make([]Reading, len(pages))
+	content := make([]prompt.PageContent, 0, len(pages))
+	for i := range pages {
+		kinds[i] = ReadingOCR
+		content = append(content, prompt.PageContent{
+			Number:  i + 1,
+			Reading: prompt.Reading(ReadingOCR),
+			Text:    pageText(res, i),
+		})
+	}
+
+	return &reading{
+		doc:      Document{Kind: doc.Kind, Pages: len(pages), Size: doc.Size, Data: doc.Data},
+		kinds:    kinds,
+		provider: name,
+		text:     res,
+		pages:    content,
+	}, nil
+}
+
+// normalisePage converts one Recognition into the shape normalise reads.
+func normalisePage(number int, width, height float64, rec *Recognition) normalise.Page {
+	words := make([]normalise.Word, 0, len(rec.Words))
+	for _, w := range rec.Words {
+		words = append(words, normalise.Word{
+			Text:       w.Text,
+			Box:        normalise.Rect(w.Box),
+			Confidence: w.Confidence,
+		})
+	}
+	return normalise.Page{Number: number, Width: width, Height: height, Words: words}
+}
+
+// pageText returns the normalised text belonging to one page.
+func pageText(res *normalise.Result, i int) string {
+	if i >= len(res.Pages) {
+		return res.Text
+	}
+	// Body excludes the page marker, which is text ovrin inserted rather than
+	// document content.
+	body := res.Pages[i].Body
+	if body.Start < 0 || body.End > len(res.Text) || body.Start > body.End {
+		return res.Text
+	}
+	return res.Text[body.Start:body.End]
 }
 
 func acquireByOCR(ctx context.Context, cfg *config, page *img.Page, doc Document, meta *Metadata, start time.Time) (*reading, error) {
@@ -242,7 +339,7 @@ func acquireByOCR(ctx context.Context, cfg *config, page *img.Page, doc Document
 	}
 
 	return &reading{
-		doc:      Document{Kind: doc.Kind, Pages: 1, Bytes: doc.Bytes},
+		doc:      Document{Kind: doc.Kind, Pages: 1, Size: doc.Size, Data: doc.Data},
 		kinds:    []Reading{ReadingOCR},
 		provider: name,
 		text:     res,

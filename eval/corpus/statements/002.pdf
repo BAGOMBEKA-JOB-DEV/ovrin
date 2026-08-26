@@ -1,0 +1,52 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 1246 >>
+stream
+BT /F2 13.0 Tf 1 0 0 1 56.00 773.00 Tm (Rhein Handelsbank AG) Tj ET
+BT /F2 9.0 Tf 1 0 0 1 56.00 765.00 Tm (Account statement) Tj ET
+56.00 760.00 483.00 0.50 re f
+BT /F1 9.0 Tf 1 0 0 1 56.00 741.00 Tm (Account holder   Vollmer Werkzeuge GmbH) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 56.00 729.00 Tm (Account number   0532013000) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 56.00 717.00 Tm (IBAN             DE89 3704 0044 0532 0130 00) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 56.00 705.00 Tm (Currency         EUR) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 56.00 693.00 Tm (Period           01 Mar 2026 to 31 Mar 2026) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 56.00 681.00 Tm (Opening balance      18,430.55) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 56.00 669.00 Tm (Closing balance      21,905.05) Tj ET
+56.00 664.00 483.00 0.50 re f
+BT /F1 9.0 Tf 1 0 0 1 56.00 645.00 Tm (Date         Description                     Debit       Credit      Balance) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 56.00 633.00 Tm (03 Mar 2026  SEPA credit - Kessler KG                  4,200.00    22,630.55) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 56.00 621.00 Tm (11 Mar 2026  Card purchase - fuel           185.50                 22,445.05) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 56.00 609.00 Tm (22 Mar 2026  SEPA debit - insurance         540.00                 21,905.05) Tj ET
+
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000216 00000 n 
+0000000318 00000 n 
+0000000454 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1752
+%%EOF

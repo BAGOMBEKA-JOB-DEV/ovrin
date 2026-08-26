@@ -79,16 +79,33 @@ func File(path string) Source { return fileSource{path: path} }
 // Document is a Source whose format has been identified.
 //
 // It is what the pipeline works on after detection, and what a [Renderer] and a
-// DocumentOCR receive.
+// [DocumentOCR] receive.
 type Document struct {
 	// Kind is the detected format.
 	Kind Kind
 
-	// Pages is the page count. One, for a single image.
+	// Pages is the page count, or 0 when it is not yet known.
+	//
+	// Detection resolves it only where the format fixes it structurally — a
+	// PNG is one page. Counting the pages of a PDF means parsing the PDF,
+	// which is a later stage, and 0 means "not yet known" rather than a
+	// placeholder 1 (docs/rules.md §8.5).
 	Pages int
 
-	// Bytes is the size of the source.
-	Bytes int64
+	// Size is the length of Data, in bytes.
+	Size int64
+
+	// Data is the document itself.
+	//
+	// A [Renderer] and a [DocumentOCR] are asked to read this document, so
+	// they have to be able to reach it — an earlier version of this type
+	// carried only metadata, which made both seams unimplementable. The bytes
+	// are already in memory by the time a Document exists, so carrying them
+	// costs a slice header rather than a copy.
+	//
+	// Treat it as read-only. It is shared with the pipeline, and it is
+	// untrusted (docs/rules.md §7.1).
+	Data []byte
 }
 
 // Page is one rasterised page, handed to an [OCR] provider.
