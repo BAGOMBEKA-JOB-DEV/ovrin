@@ -8,6 +8,7 @@ import (
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/compare"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/ground"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/normalise"
+	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/retry"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/validate"
 )
@@ -527,6 +528,53 @@ func secondValues(sch *schema.Schema, object map[string]any, cfg *config) valida
 				if r := v.Field(f, raw); r.Converted {
 					out[key] = r.Value
 				}
+			}
+		}
+	}
+	walk(sch.Fields, object, "")
+	return out
+}
+
+// replyResults walks the schema against a reply and returns one result per
+// field, in schema order, for [retry.Assess] to judge.
+//
+// It converts and applies rules but assembles nothing: the point is to find out
+// whether the reply is worth asking again about before paying to build a
+// Result from it. Order matters — retry renders the failures in the order it
+// is given them, and a stable instruction is what lets a provider's prompt
+// cache hit and a golden test mean something.
+func replyResults(sch *schema.Schema, object map[string]any, cfg *config) []retry.FieldResult {
+	v := validate.New(validate.WithDateOrder(validate.DateOrder(cfg.dateOrder)))
+	out := make([]retry.FieldResult, 0, len(sch.Fields))
+	var walk func(fields []schema.Field, obj map[string]any, prefix string)
+	walk = func(fields []schema.Field, obj map[string]any, prefix string) {
+		for i := range fields {
+			f := fields[i]
+			key := f.Key
+			if prefix != "" {
+				key = prefix + "." + leaf(f.Key)
+			}
+			raw := lookup(obj, leaf(f.Key))
+			switch f.Kind {
+			case schema.KindObject:
+				nested, _ := raw.(map[string]any)
+				walk(f.Fields, nested, key)
+			case schema.KindArray:
+				items, _ := raw.([]any)
+				for j, item := range items {
+					if f.Elem == nil {
+						continue
+					}
+					ek := schema.IndexKey(key, j)
+					if f.Elem.Kind == schema.KindObject {
+						nested, _ := item.(map[string]any)
+						walk(f.Elem.Fields, nested, ek)
+						continue
+					}
+					out = append(out, retry.FieldResult{Field: ek, Result: v.Field(*f.Elem, item)})
+				}
+			default:
+				out = append(out, retry.FieldResult{Field: key, Result: v.Field(f, raw)})
 			}
 		}
 	}

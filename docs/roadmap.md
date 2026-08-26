@@ -84,7 +84,9 @@ cross-validation (v0.3), provider fallback chains (v0.2), local rasterising
 - [x] `ocr/tesseract` — and it needs **no cgo**: Tesseract compiled to
       WebAssembly under a pure-Go runtime, so the whole offline path
       cross-compiles
-- [ ] `ocr/textract`, `ocr/azure`
+- [x] `ocr/textract`, `ocr/azure` — both standard-library-only; AWS SigV4
+      is ~90 lines over `crypto/hmac`, checked against AWS's published
+      test vectors, so no cloud SDK reaches your `go.mod`
 - [x] Date-order handling for ambiguous dates
 - [x] Per-field provenance with bounding boxes, for every reading that
       supplies geometry — vision supplies none, by its nature
@@ -95,14 +97,26 @@ cross-validation (v0.3), provider fallback chains (v0.2), local rasterising
 
 ## v0.3 — Harder documents
 
-- [ ] DOCX, XLSX, CSV sources
-- [ ] Multi-page documents with per-page acquisition paths
-- [ ] Layout preservation — tables, columns, key-value regions
-- [ ] Two readings and cross-validation
+- [x] DOCX, XLSX, CSV sources — `internal/office`, no new dependency. They
+      report no geometry deliberately, so a value can be located in the text
+      but not highlighted on a page
+- [x] Multi-page documents with per-page acquisition paths — a digital
+      contract with a scanned appendix reads each page by its own path
+- [x] Layout preservation — `Recognition.Layout` carries tables and key-value
+      regions across the OCR seam; see the note on
+      [ADR-0009](adr/0009-ocr-seam.md), which this reverses a cost of.
+      Columns are **not** preserved: the two cloud text-detection APIs report
+      no column structure, and a two-column page can still interleave
+- [x] Two readings and cross-validation
       ([ADR-0014](adr/0014-cross-validation.md))
-- [ ] Extraction retry on schema-invalid output
-- [ ] Suspicious-content detection
-      ([ADR-0017](adr/0017-untrusted-document-content.md) mitigation 4)
+- [x] Extraction retry on schema-invalid output — once, and only for a reply
+      that was malformed rather than merely disappointing
+- [x] Suspicious-content detection
+      ([ADR-0017](adr/0017-untrusted-document-content.md) mitigation 4) —
+      zero-width characters, bidi controls, instruction-shaped text, text
+      outside the media box and white-on-white. **Not** detected in DOCX:
+      resolving its colour inheritance needs the full `styles.xml` chain, and
+      partial resolution produces false negatives that look like coverage
 
 ---
 

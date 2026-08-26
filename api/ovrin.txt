@@ -14,6 +14,10 @@ pkg ovrin, const CapDisagreement float64
 pkg ovrin, const CapRuleFailed float64
 pkg ovrin, const CapSuspicious float64
 pkg ovrin, const CapUngrounded float64
+pkg ovrin, const CellColumnHeader CellKind
+pkg ovrin, const CellData CellKind
+pkg ovrin, const CellRowHeader CellKind
+pkg ovrin, const CellUnknown CellKind
 pkg ovrin, const DateOrderUnknown DateOrder
 pkg ovrin, const DayFirst DateOrder
 pkg ovrin, const DefaultMaxDecompressedBytes int64
@@ -109,17 +113,31 @@ pkg ovrin, method (*Error) Unwrap() []error
 pkg ovrin, method (*Error) WithCause(error) *Error
 pkg ovrin, method (*Explanation) String() string
 pkg ovrin, method (*Result[T]) Explain(string) (*Explanation, bool)
+pkg ovrin, method (CellKind) Header() bool
+pkg ovrin, method (CellKind) String() string
 pkg ovrin, method (CrossFields) Count(string) int
 pkg ovrin, method (CrossFields) Number(string) (float64, bool)
 pkg ovrin, method (CrossFields) Text(string) (string, bool)
 pkg ovrin, method (CrossFields) Time(string) (time.Time, bool)
 pkg ovrin, method (Kind) String() string
+pkg ovrin, method (Layout) At(Ref) (Cell, bool)
+pkg ovrin, method (Layout) Ref(int, Cell) Ref
 pkg ovrin, method (Op) String() string
 pkg ovrin, method (Reading) String() string
 pkg ovrin, type Candidate struct
 pkg ovrin, type Candidate struct, Reading Reading
 pkg ovrin, type Candidate struct, Source Provenance
 pkg ovrin, type Candidate struct, Value any
+pkg ovrin, type Cell struct
+pkg ovrin, type Cell struct, Box Rect
+pkg ovrin, type Cell struct, Column int
+pkg ovrin, type Cell struct, ColumnSpan int
+pkg ovrin, type Cell struct, Confidence float64
+pkg ovrin, type Cell struct, Kind CellKind
+pkg ovrin, type Cell struct, Row int
+pkg ovrin, type Cell struct, RowSpan int
+pkg ovrin, type Cell struct, Text string
+pkg ovrin, type CellKind string
 pkg ovrin, type Client struct
 pkg ovrin, type Content struct
 pkg ovrin, type Content struct, Image []byte
@@ -202,6 +220,9 @@ pkg ovrin, type FieldResult struct, Validation []RuleResult
 pkg ovrin, type FieldResult struct, Value any
 pkg ovrin, type Hook func(context.Context, Event)
 pkg ovrin, type Kind string
+pkg ovrin, type Layout struct
+pkg ovrin, type Layout struct, Pairs []Pair
+pkg ovrin, type Layout struct, Tables []Table
 pkg ovrin, type Line struct
 pkg ovrin, type Line struct, Box Rect
 pkg ovrin, type Line struct, Page int
@@ -212,6 +233,7 @@ pkg ovrin, type Metadata struct, Kind Kind
 pkg ovrin, type Metadata struct, Pages int
 pkg ovrin, type Metadata struct, Providers map[Op]string
 pkg ovrin, type Metadata struct, Readings []Reading
+pkg ovrin, type Metadata struct, Retried bool
 pkg ovrin, type Metadata struct, Usage Usage
 pkg ovrin, type Model interface
 pkg ovrin, type Model interface, Generate(context.Context, ModelRequest) (*ModelResponse, error)
@@ -235,6 +257,11 @@ pkg ovrin, type Page struct, Height float64
 pkg ovrin, type Page struct, Image image.Image
 pkg ovrin, type Page struct, Number int
 pkg ovrin, type Page struct, Width float64
+pkg ovrin, type Pair struct
+pkg ovrin, type Pair struct, Confidence float64
+pkg ovrin, type Pair struct, Key Region
+pkg ovrin, type Pair struct, Page int
+pkg ovrin, type Pair struct, Value Region
 pkg ovrin, type Provenance struct
 pkg ovrin, type Provenance struct, Box *Rect
 pkg ovrin, type Provenance struct, Exact bool
@@ -247,6 +274,7 @@ pkg ovrin, type ReadingMode string
 pkg ovrin, type Recognition struct
 pkg ovrin, type Recognition struct, Confidence float64
 pkg ovrin, type Recognition struct, Language string
+pkg ovrin, type Recognition struct, Layout *Layout
 pkg ovrin, type Recognition struct, Lines []Line
 pkg ovrin, type Recognition struct, Raw any
 pkg ovrin, type Recognition struct, Usage Usage
@@ -256,6 +284,15 @@ pkg ovrin, type Rect struct, MaxX float64
 pkg ovrin, type Rect struct, MaxY float64
 pkg ovrin, type Rect struct, MinX float64
 pkg ovrin, type Rect struct, MinY float64
+pkg ovrin, type Ref struct
+pkg ovrin, type Ref struct, Column int
+pkg ovrin, type Ref struct, Page int
+pkg ovrin, type Ref struct, Row int
+pkg ovrin, type Ref struct, Table int
+pkg ovrin, type Region struct
+pkg ovrin, type Region struct, Box Rect
+pkg ovrin, type Region struct, Confidence float64
+pkg ovrin, type Region struct, Text string
 pkg ovrin, type Renderer interface
 pkg ovrin, type Renderer interface, Render(context.Context, Document, int, int) (image.Image, error)
 pkg ovrin, type Result[T any] struct
@@ -284,6 +321,13 @@ pkg ovrin, type Source interface
 pkg ovrin, type Span struct
 pkg ovrin, type Span struct, End int
 pkg ovrin, type Span struct, Start int
+pkg ovrin, type Table struct
+pkg ovrin, type Table struct, Box Rect
+pkg ovrin, type Table struct, Cells []Cell
+pkg ovrin, type Table struct, Columns int
+pkg ovrin, type Table struct, Confidence float64
+pkg ovrin, type Table struct, Page int
+pkg ovrin, type Table struct, Rows int
 pkg ovrin, type Tolerance struct
 pkg ovrin, type Tolerance struct, Absolute float64
 pkg ovrin, type Tolerance struct, Relative float64

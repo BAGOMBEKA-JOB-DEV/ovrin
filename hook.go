@@ -90,8 +90,19 @@ type Metadata struct {
 	// Pages in the document.
 	Pages int
 
-	// Usage is the total across every provider call.
+	// Usage is the total across every provider call, the second attempt
+	// included when Retried is true.
 	Usage Usage
+
+	// Retried reports whether the model was asked a second time because its
+	// first reply was malformed — not JSON, or a value that could not be the
+	// type the field declares.
+	//
+	// It is not a warning. A retried extraction that came back clean is as
+	// good as one that never needed asking twice; what it tells you is that
+	// this provider, prompt or document produced a bad reply once, which is
+	// worth knowing in aggregate when choosing between providers.
+	Retried bool
 
 	// Duration is the wall time of the extraction.
 	Duration time.Duration

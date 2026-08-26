@@ -750,7 +750,17 @@ func (s ModelSuite) testNoGoroutineLeak(t *testing.T) {
 		case <-blocked:
 		}
 	}))
-	t.Cleanup(func() { close(blocked); hung.Close() })
+	// Shutting the hung server down is done through a sync.Once because it
+	// happens either at the end of this function or, if it returns early, in
+	// cleanup — and closing a channel twice panics.
+	var shutdown sync.Once
+	stopHung := func() {
+		shutdown.Do(func() {
+			close(blocked)
+			hung.Close()
+		})
+	}
+	t.Cleanup(stopHung)
 	hungModel := s.New(hung.URL)
 
 	// Warm up before the baseline. A test server's accept loop and the HTTP
@@ -778,6 +788,16 @@ func (s ModelSuite) testNoGoroutineLeak(t *testing.T) {
 	<-warmDone
 
 	defer checkNoGoroutineLeaks(t)()
+
+	// Defers run last-in-first-out, so this shuts the hung server down before
+	// the check above runs. It matters: the loop below abandons five requests,
+	// and an abandoned connection's client-side goroutines are torn down by
+	// net/http on its own schedule. Waiting for that to happen made this test
+	// a race it lost about one run in twenty under load. Close waits for the
+	// server's connections, so by the time the count is taken the adapter's
+	// side has seen EOF and a goroutine still running is genuinely leaked
+	// rather than merely slow.
+	defer stopHung()
 
 	for i := 0; i < 5; i++ {
 		if _, err := m.Generate(context.Background(), s.request()); err != nil {

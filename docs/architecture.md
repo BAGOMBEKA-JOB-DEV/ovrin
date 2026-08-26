@@ -357,6 +357,7 @@ type Metadata struct {
     Kind      Kind
     Pages     int
     Usage     Usage
+    Retried   bool              // the model was asked twice; its first reply was malformed
     Duration  time.Duration
 }
 

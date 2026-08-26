@@ -69,6 +69,12 @@ type FieldResult struct {
 	// This is not Value != zero, and the distinction is the point: a payments
 	// system must be able to tell "the total is zero" from "we could not read
 	// the total".
+	//
+	// Found does not promise Value is usable. A field the model answered with
+	// something that could not be converted to its declared type is Found with
+	// a nil Value and Valid false, because "answered unusably" and "not
+	// answered at all" are different facts and both are worth having. Check
+	// Valid, or take Value through a comma-ok assertion, before using it.
 	Found bool
 
 	// Confidence is on 0..1.

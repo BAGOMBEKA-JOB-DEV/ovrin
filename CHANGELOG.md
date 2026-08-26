@@ -125,6 +125,75 @@ prefix. Entries below say which module they affect where it is not the core.
   it imports `model/skyl`, and keeping it in the root module would put skyl in
   the `go.sum` of every ovrin user to run a programme none of them run.
 
+- **Two readings and cross-validation (`ModeBoth`).** OCR and vision now read
+  the document independently and their answers are compared field by field.
+  Where they disagree, both values are kept on `FieldResult.Candidates`, the
+  `agreement` signal scores zero, confidence is capped at `CapDisagreement`,
+  and the field is flagged for review. Nothing is resolved silently — a
+  quiet pick between two different readings of an amount is the failure this
+  exists to prevent ([ADR-0014](docs/adr/0014-cross-validation.md)).
+
+  The comparison is type-aware, so `25,000` and `25000` are the same answer
+  and only a real disagreement is reported. Before this, the `agreement`
+  signal was the second-heaviest in the confidence model at 0.25 and could
+  never fire, because only one reading was ever taken.
+
+- **DOCX, XLSX and CSV** (`internal/office`). Read with `archive/zip`,
+  `encoding/xml` and `encoding/csv` — no new dependency. These carry their own
+  text, so they take the same path a text-layer PDF does: no OCR, no renderer,
+  no rasterisation.
+
+  They report **no geometry**, deliberately. A DOCX has no fixed layout until
+  something renders it, and `internal/normalise` abstains from its
+  position-dependent checks rather than run them against an invented page size.
+  The cost is real and stated in the package: a value extracted from one of
+  these can be located in the text but not highlighted on a page. Hidden runs
+  (`w:vanish`) have their text extracted and their count reported, because text
+  a reviewer cannot see and a model can is the shape of an injection.
+
+- **`ocr/textract` and `ocr/azure`.** Both standard-library-only — AWS SigV4 is
+  ~90 lines over `crypto/hmac`, checked against AWS's own published test
+  vectors, and Azure needs one header. No AWS or Azure SDK enters your
+  `go.mod`. Both pass the shared contract suite with no assertion skipped, and
+  both report page-unit billing on `Recognition.Usage`.
+
+- **One retry when a reply is malformed.** A model that returns a string where
+  a number belongs made a formatting mistake, and is asked once more, shown its
+  own validation failures. The document is **not** re-sent — the model has
+  already read it — so the second request is short.
+
+  The retry is deliberately reluctant. A value that broke a `min`, `max`,
+  `enum` or `format` rule is the document disagreeing with the schema, and
+  asking again could only invite the model to invent something that satisfies
+  the rule, which is rule §8.5's cardinal sin. A second reply that is no better
+  than the first is discarded. `Metadata.Retried` reports whether it happened.
+
+- **`Recognition.Layout`.** Tables and key-value pairs now cross the OCR seam
+  in a normalised form — `Layout`, `Table`, `Cell`, `Pair`, `Region`, `Ref` and
+  `CellKind` — instead of being discarded into `Raw`. The field is a pointer
+  because an empty layout and no layout are different facts: a provider that
+  looked and found no tables is not a provider that does not look.
+
+  `Ref` is the loggable form of a claim about a table — "page 4, table 1, row
+  3, column 2" — so a provenance entry or a review interface can say which
+  value it means without repeating the value.
+  [ADR-0009](docs/adr/0009-ocr-seam.md) carries a note, since this reverses a
+  cost that ADR accepted.
+
+### Fixed
+
+- A source file that does not exist, or cannot be read, is now `ErrNoContent`
+  rather than `ErrInternal`. `ErrInternal` means "file a bug against ovrin",
+  and a typo in a path is the caller's to fix.
+
+- Suspicious-content detection was keyed on the page a value was grounded to.
+  An ungrounded value has no page, so exactly the fields an injection produces
+  were the ones never flagged. It is now document-wide.
+
+- `ocr/google`, `model/skyl`, `otel`, `render/pdfium` and `examples/receipt`
+  could not be built outside the development workspace, which is how CI builds
+  them.
+
 ### Notes
 
 - No release has been made. The install commands in the README will not work

@@ -46,6 +46,7 @@ type Recognition struct {
     Lines      []Line
     Confidence float64   // provider's own, over the page
     Language   string
+    Layout     *Layout   // tables and pairs; nil when the provider does not look
     Raw        any
     Usage      Usage     // what recognising this page cost
 }
@@ -91,7 +92,23 @@ provenance model are written once against one shape.
 Document AI's entity detection and Azure's key-value pairs are all richer than
 `Words` and `Lines`, and reducing them to words discards work the caller paid
 for. `Raw any` mitigates it for anyone willing to type-assert, which is not a
-real answer. Five modules is five sets of release mechanics for one maintainer.
+real answer.
+
+> **Note, 2026-08-26.** This cost was partly paid back rather than accepted
+> permanently. `Recognition.Layout *Layout` now carries tables and key-value
+> pairs across the seam in a normalised form, so a provider that detects them
+> no longer has to discard them into `Raw`. The decision above is unchanged:
+> the seam is still one narrow shape every provider maps onto, and `Layout` is
+> that same normalisation applied to structure instead of being an escape
+> hatch. What made it affordable is that the three providers' table models
+> turned out to share an intersection — cells with spans and an optional
+> header label — that all of them map onto without loss.
+>
+> It is not free. `Layout` is seven more exported types to keep stable, a
+> provider that reports structure ovrin cannot represent still loses it, and
+> the pointer exists only to distinguish "found none" from "did not look",
+> which is a subtlety every adapter author now has to get right. Entity
+> detection remains in `Raw`, so the paragraph above is still true of it. Five modules is five sets of release mechanics for one maintainer.
 And the contract suite is a genuine barrier to contribution — "here is a
 provider adapter" now means "here is a provider adapter that passes twenty
 behavioural tests".
