@@ -102,7 +102,10 @@ The default scorer is a weighted mean over available signals, with hard floors.
 | `cross_field` | 0.05 |
 
 **Hard floors**, applied after the mean, because some failures should not be
-averaged away:
+averaged away. A ceiling that actually binds is recorded as an extra
+zero-weight signal named `capped:…`, so a reader doing the arithmetic can see
+why the reported number is below the mean. Zero weight leaves the mean itself
+untouched:
 
 | Condition | Confidence capped at |
 |---|---|
@@ -128,6 +131,17 @@ format       1.00 × 0.05  = 0.050     parsed as currency
 
 `agreement` is absent because only one reading ran, so its 0.25 is excluded
 from the denominator rather than counted as a failure.
+
+Had a ceiling bound here, a further line would appear:
+
+```text
+capped:grounding   —          the value is not in the source
+```
+
+and the reported confidence would be the ceiling rather than the mean. A
+ceiling only binds when it is **below** the mean — it is a maximum, not a
+replacement. A value grounded at 0.0 whose other signals already drag the mean
+to 0.33 stays at 0.33, because `capped:grounding` is 0.35.
 
 **Aggregate confidence** on `Result` is the mean over fields, weighted by
 whether a field is `required`. A missing optional field should not drag down a

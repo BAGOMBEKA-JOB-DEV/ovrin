@@ -86,21 +86,36 @@ func (defaultScorer) Score(f FieldEvidence) (float64, []Signal) {
 		add(SignalAgreement, 0, WeightAgreement, "readings disagree")
 	}
 
-	conf := weightedMean(signals)
+	mean := weightedMean(signals)
+	conf := mean
 
-	// The floors, strongest first.
-	switch {
-	case ruleFailed:
-		conf = min(conf, CapRuleFailed)
+	// The ceilings. A value that satisfies four signals and fails its declared
+	// rule is not four-fifths correct, it is unusable, and averaging alone
+	// would let the strong signals hide the one that matters.
+	//
+	// A ceiling that binds is recorded as a zero-weight signal. docs/confidence.md
+	// promises every score decomposes into its signals, and a confidence that
+	// came out below the mean with nothing to explain the gap would make that
+	// claim false — a reader could do the arithmetic and get a different
+	// number. Zero weight keeps the mean itself untouched.
+	cap := func(limit float64, name, why string) {
+		if limit >= conf {
+			return
+		}
+		conf = limit
+		signals = append(signals, Signal{Name: name, Note: why})
+	}
+	if ruleFailed {
+		cap(CapRuleFailed, "capped:rule", "a declared rule failed")
 	}
 	if f.Grounding == ground.NotFound && len(f.Provenance) == 0 && hasSignal(signals, SignalGrounding) {
-		conf = min(conf, CapUngrounded)
+		cap(CapUngrounded, "capped:grounding", "the value is not in the source")
 	}
 	if len(f.Candidates) > 1 {
-		conf = min(conf, CapDisagreement)
+		cap(CapDisagreement, "capped:disagreement", "the readings disagree")
 	}
 	if f.Suspicious {
-		conf = min(conf, CapSuspicious)
+		cap(CapSuspicious, "capped:suspicious", "the source page carried suspicious content")
 	}
 	return round2(conf), signals
 }
@@ -195,11 +210,4 @@ func (a *assembler) score(f schema.Field, vr validate.Result, gr ground.Result, 
 		s = defaultScorer{}
 	}
 	return s.Score(ev)
-}
-
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
 }

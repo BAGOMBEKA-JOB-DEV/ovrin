@@ -80,6 +80,13 @@ type FieldResult struct {
 	// still gets the better answer.
 	Candidates []Candidate
 
+	// Validation is each declared rule and whether it passed.
+	//
+	// Distinct from Errors: a rule that failed appears in both, but Validation
+	// also records the rules that passed, which is what makes a confidence
+	// score checkable by hand rather than merely reported.
+	Validation []RuleResult
+
 	// Errors says why the field is not Valid, or why it was not Found.
 	Errors []error
 }
@@ -149,6 +156,7 @@ func (r *Result[T]) Explain(field string) (*Explanation, bool) {
 		Signals:    f.Signals,
 		Provenance: f.Provenance,
 		Candidates: f.Candidates,
+		Validation: f.Validation,
 	}
 	for _, reason := range r.Reasons {
 		if reason.Field == field {

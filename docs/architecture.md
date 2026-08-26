@@ -205,6 +205,7 @@ type FieldResult struct {
     Signals    []Signal      // what produced the confidence            ADR-0013
     Provenance []Provenance  // where it came from                      ADR-0015
     Candidates []Candidate   // competing readings, if any              ADR-0014
+    Validation []RuleResult  // each rule, and whether it passed
     Errors     []error
 }
 ```

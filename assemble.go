@@ -163,6 +163,7 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 		Valid:      vr.Valid(),
 		Signals:    signals,
 		Provenance: ev.Provenance,
+		Validation: ev.Validation,
 	}
 	if vr.Message != "" {
 		fr.Errors = append(fr.Errors, &Error{Op: OpValidate, Field: key, Kind: ErrSchema, Message: vr.Message})

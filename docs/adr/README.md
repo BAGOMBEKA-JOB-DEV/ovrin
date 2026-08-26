@@ -12,6 +12,13 @@ superseded cleanly when one of them turns out wrong.
 **Never edit an accepted record to change its decision.** Supersede it with a
 new one and mark the old one `Superseded by ADR-XXXX`. The history is the point.
 
+**A code listing inside a record is kept current.** Editing a declaration so
+it still matches the code is not editing the decision — a listing that has gone
+stale misleads a reader about the type, which is the opposite of what the
+listing is for. The `mirror` fences make this mechanical: change the type and
+the build tells you which records to update. What is never edited is the
+decision itself.
+
 **Numbers are permanent.** Other documents, doc comments and the pull request
 template cite them. A renumbered ADR breaks every citation.
 

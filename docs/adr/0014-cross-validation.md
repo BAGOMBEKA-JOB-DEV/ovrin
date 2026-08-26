@@ -46,6 +46,7 @@ type FieldResult struct {
     Signals     []Signal
     Provenance  []Provenance
     Candidates  []Candidate   // populated when readings disagreed
+    Validation  []RuleResult
     Errors      []error
 }
 

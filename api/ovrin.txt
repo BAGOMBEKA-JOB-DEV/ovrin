@@ -176,6 +176,7 @@ pkg ovrin, type FieldResult struct, Found bool
 pkg ovrin, type FieldResult struct, Provenance []Provenance
 pkg ovrin, type FieldResult struct, Signals []Signal
 pkg ovrin, type FieldResult struct, Valid bool
+pkg ovrin, type FieldResult struct, Validation []RuleResult
 pkg ovrin, type FieldResult struct, Value any
 pkg ovrin, type Hook func(context.Context, Event)
 pkg ovrin, type Kind string

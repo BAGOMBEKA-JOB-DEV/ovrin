@@ -69,7 +69,7 @@ func (o fakeOCR) Recognise(context.Context, ovrin.Page) (*ovrin.Recognition, err
 }
 
 // pngBytes is a tiny valid PNG, so the examples have a real image source.
-func pngBytes() []byte {
+func testPNG() []byte {
 	m := image.NewRGBA(image.Rect(0, 0, 4, 4))
 	m.Set(0, 0, color.RGBA{A: 255})
 	var buf bytes.Buffer
@@ -87,7 +87,7 @@ func ExampleExtract() {
 		ovrin.WithOCR(fakeOCR{words: []string{"INV-2026-0417", "Kampala", "Supplies", "Ltd", "UGX", "2,500,000"}}),
 	)
 
-	res, err := ovrin.Extract[Invoice](context.Background(), c, ovrin.Bytes(pngBytes()))
+	res, err := ovrin.Extract[Invoice](context.Background(), c, ovrin.Bytes(testPNG()))
 	if err != nil {
 		fmt.Println("error:", err)
 		return
@@ -115,7 +115,7 @@ func ExampleResult_Explain_fabrication() {
 		ovrin.WithOCR(fakeOCR{words: []string{"INV-2026-0417", "Kampala", "Supplies", "Ltd", "UGX", "2,500,000"}}),
 	)
 
-	res, _ := ovrin.Extract[Invoice](context.Background(), c, ovrin.Bytes(pngBytes()))
+	res, _ := ovrin.Extract[Invoice](context.Background(), c, ovrin.Bytes(testPNG()))
 
 	total := res.Fields["total"]
 	fmt.Printf("value      %.0f\n", total.Value)
