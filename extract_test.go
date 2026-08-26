@@ -924,7 +924,7 @@ func TestAMalformedReplyIsAskedForAgainOnce(t *testing.T) {
 	}))
 
 	res, err := ovrin.Extract[Doc](context.Background(), c,
-		ovrin.Bytes([]byte("Total: 1250.00\n")))
+		ovrin.Bytes([]byte("item,total\nconsulting,1250.00\n")))
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -977,7 +977,7 @@ func TestABrokenRuleIsNotRetried(t *testing.T) {
 	}))
 
 	res, err := ovrin.Extract[Doc](context.Background(), c,
-		ovrin.Bytes([]byte("Total: 12.50\n")))
+		ovrin.Bytes([]byte("item,total\nconsulting,12.50\n")))
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -1012,7 +1012,7 @@ func TestAWorseSecondReplyIsDiscarded(t *testing.T) {
 	}))
 
 	res, err := ovrin.Extract[Doc](context.Background(), c,
-		ovrin.Bytes([]byte("Total: 1250.00\n")))
+		ovrin.Bytes([]byte("item,total\nconsulting,1250.00\n")))
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
