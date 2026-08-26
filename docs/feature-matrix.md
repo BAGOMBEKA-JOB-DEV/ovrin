@@ -73,8 +73,8 @@ skipped. Every cell below is a measurement.
 | Detected language | ✅ | ✅ | ⛔ Textract reports none, so `Recognition.Language` is always empty | ✅ most confident language whose spans overlap the page |
 | Page confidence | ✅ | ✅ | ⚠️ **derived** — Textract publishes none, so it is the mean of the LINE confidences (falling back to the words'), recorded in `Analysis.PageConfidenceDerived` | ⚠️ **derived** — same, the mean of the per-word confidences |
 | Handwriting | ✅ | ⚠️ poor; Tesseract is built for print | ✅ read; ⚠️ the PRINTED/HANDWRITING label itself is dropped | ✅ read; ⚠️ the handwriting style is dropped |
-| Table structure | ⚠️ detected by the provider, **discarded** by ovrin's `Recognition` | ⛔ | ⛔ not requested — `AnalyzeDocument` would return them and is deliberately unused | ⛔ not requested with `prebuilt-read`; ⚠️ with `WithModel("prebuilt-layout")` they are detected and discarded |
-| Key-value pairs | ⚠️ same | ⛔ | ⛔ same as tables | ⚠️ same as tables |
+| Table structure | ⚠️ detected by the provider, **discarded** by ovrin's `Recognition` | ⛔ | ⛔ not requested — `AnalyzeDocument` would return them and is deliberately unused | ⛔ not looked for with `prebuilt-read`, and `Recognition.Layout` is nil to say so; ✅ with `WithModel("prebuilt-layout")` or any other model, mapped onto `ovrin.Table` and rendered as a grid in the page content the model reads |
+| Key-value pairs | ⚠️ same | ⛔ | ⛔ same as tables | ✅ same models as tables, mapped onto `ovrin.Pair`; ⚠️ they cross the seam and reach `Recognition.Layout.Pairs`, and the prompt does not yet render them |
 | Per-symbol geometry, block types, per-block languages | ⚠️ **silently ignored** — reachable only through `Recognition.Raw` | ⛔ | ⚠️ block ids, the relationship graph and per-word `TextType` — same | ⚠️ paragraphs, selection marks, barcodes, formulas, styles, page rotation — same |
 | Page-unit billing | ⚠️ not reported; `Recognition` gained a `Usage` field in v0.2 and the adapter does not yet fill it | ⚠️ same | ✅ **one page unit per page** | ✅ **one page unit per page** |
 | Provider-side entity extraction | ⛔ deliberately unused — see below | ⛔ | ⛔ | ⛔ |
@@ -93,11 +93,22 @@ OCR adapter would be security-relevant code in the wrong place.
 on status alone would report a permission failure as a blank scan. Both the
 status code and the per-response gRPC code are classified.
 
-**The table and key-value rows are the honest ones.** Document AI, Textract and
-Azure all return richer structure than ovrin's `Recognition` carries, and
-reducing it to words and lines discards work you paid for
-([ADR-0009](adr/0009-ocr-seam.md)). It is reachable through `Recognition.Raw`
-by type assertion, which is not a real answer. Layout preservation is v0.3.
+**The table and key-value rows were the honest ones, and `azure` is now the
+exception.** `Recognition.Layout` carries tables and key-value pairs across the
+seam in a normalised form ([ADR-0009](adr/0009-ocr-seam.md)), and `ocr/azure`
+fills it: a detected table reaches `ovrin.Table` with its grid, spans and cell
+kinds intact, and `internal/prompt` renders it as a grid inside the untrusted
+content markers so the model sees a value under its column heading rather than
+a flattened run of words. `google` and `textract` still reduce structure to
+words and lines, and it is reachable there only through `Recognition.Raw` by
+type assertion, which is not a real answer.
+
+**The pointer on `Recognition.Layout` is what says who looked.** Nil is a
+provider that does not report structure; a non-nil empty `Layout` is one that
+looked and found none. `ocr/azure` returns nil for `prebuilt-read` — the
+default, which is OCR and nothing else — and a non-nil `Layout` for every other
+model. A caller deciding whether to read a page as a table or as prose needs
+that distinction, and a plain slice cannot express it.
 
 **Provider-side extraction is deliberately unused.** Document AI will return an
 invoice object directly. Ovrin uses these providers for OCR only, because
