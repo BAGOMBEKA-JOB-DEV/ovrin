@@ -36,7 +36,7 @@ exists rather than added later.
 Every `FieldResult` carries provenance, and every stage that touches content
 preserves it.
 
-```go
+```go mirror
 type Provenance struct {
     Reading Reading   // ReadingText, ReadingOCR, ReadingVision
     Page    int       // 1-based

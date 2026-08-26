@@ -25,7 +25,7 @@ system that cannot tell those apart will eventually pay the wrong amount.
 `Extract` returns either a `*Result[T]` or an error, never both, and `Valid`
 rather than `error` reports whether the data is good.
 
-```go
+```go mirror
 type Result[T any] struct {
     Data        T
     Valid       bool

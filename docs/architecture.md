@@ -90,13 +90,21 @@ imports an implementation, so a user's `go.sum` contains exactly the providers
 they chose and nothing else ([ADR-0009](adr/0009-ocr-seam.md), rule
 [§4.2](rules.md#4-dependencies)).
 
+**Inside the module the arrows point one way only: root → `internal/`.** No
+package under `internal/` imports the root, because the root imports them and
+Go rejects a cycle. So an internal package that needs to hand back something
+shaped like a public type declares its own — `prompt.Request` mirrors
+`ModelRequest` field for field — and the root converts at the boundary. The
+conversion is mechanical and deliberately boring; that boringness is the price
+of the public types being owned by exactly one package.
+
 ---
 
 ## The seams
 
 Three interfaces, all declared in the core, all implemented elsewhere.
 
-```go
+```go mirror
 // Model produces structured JSON from document content.        ADR-0007
 type Model interface {
     Generate(ctx context.Context, req ModelRequest) (*ModelResponse, error)
@@ -131,10 +139,14 @@ image, plus cloud OCR providers that accept a PDF directly.
 ```go mirror
 // Client holds the providers, limits and policy an extraction runs under.
 // It is built once and shared; every method is safe for concurrent use.
-type Client struct{ /* unexported */ }
+type Client struct {
+	cfg config
+}
 
 // Option configures a Client, or one Extract call. See ADR-0026.
-type Option func(*config)
+type Option interface {
+	apply(*config)
+}
 
 func New(opts ...Option) *Client
 ```
@@ -145,9 +157,12 @@ thousands of lines from the mistake (rule [§1.6](rules.md#1-public-api)).
 Omitting `WithModel` entirely is *configuration*, not a programmer error, and
 surfaces as `ErrNoProvider` from `Extract`.
 
-`Option` is a func over an unexported `config`, which is what lets the same type
-apply both to `New` and to a single `Extract` call without exporting a config
-struct (rule [§1.4](rules.md#1-public-api)).
+`Option` is an interface with one unexported method over an unexported
+`config`. That is what lets the same type apply both to `New` and to a single
+`Extract` call without exporting a config struct (rule
+[§1.4](rules.md#1-public-api)), and the unexported method keeps the set of
+options closed. A bare `func(*config)` would have worked too, but godoc renders
+it literally — naming a type the reader cannot see.
 
 ---
 
@@ -170,7 +185,7 @@ method to `*Client` never breaks anyone.
 
 ## The data model
 
-```go
+```go mirror
 type Result[T any] struct {
     Data        T                        // typed, partially populated  ADR-0004
     Valid       bool                     // every rule passed
@@ -362,7 +377,7 @@ type FieldEvidence struct {
     Value      any
     Found      bool
     Reading    Reading
-    OCRConf    *float64      // nil when the value did not come from OCR
+    OCRConfidence *float64   // nil when the value did not come from OCR
     Grounding  float64
     Provenance []Provenance
     Candidates []Candidate
@@ -447,7 +462,35 @@ and the results are compared field by field
 
 Sentinels for the kind, one typed `*Error` for the detail, and a multi-error
 `Unwrap` so both questions can be asked of the same value
-([ADR-0019](adr/0019-error-model.md)):
+([ADR-0019](adr/0019-error-model.md), [ADR-0030](adr/0030-an-internal-failure-sentinel.md)).
+
+This is the **current, complete** set. ADR-0019's own listing is the historical
+record of the twelve decided then; this one is checked against the code on
+every test run.
+
+```go mirror
+var (
+	ErrUnsupportedFormat = errors.New("ovrin: unsupported document format")
+	ErrNoContent         = errors.New("ovrin: no readable content in document")
+	ErrNoProvider        = errors.New("ovrin: no provider configured for this document")
+	ErrSchema            = errors.New("ovrin: invalid schema")
+	ErrLimitExceeded     = errors.New("ovrin: resource limit exceeded")
+	ErrAuth              = errors.New("ovrin: provider authentication failed")
+	ErrRateLimit         = errors.New("ovrin: provider rate limited")
+	ErrUnavailable       = errors.New("ovrin: provider unavailable")
+	ErrBadResponse       = errors.New("ovrin: provider returned an unusable response")
+	ErrUnsupported       = errors.New("ovrin: unsupported by this provider")
+	ErrEncrypted         = errors.New("ovrin: document is encrypted")
+	ErrInternal          = errors.New("ovrin: internal failure")
+	ErrBadRequest        = errors.New("ovrin: provider rejected the request")
+)
+```
+
+Which one you get decides what to do about it, and they are deliberately
+different questions: fix the document, fix the schema, raise a limit, fix a
+credential, change provider — or, for `ErrInternal` alone, file a bug against
+ovrin.
+
 
 ```go
 res, err := ovrin.Extract[Invoice](ctx, c, src)

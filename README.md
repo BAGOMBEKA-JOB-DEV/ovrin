@@ -101,7 +101,7 @@ mechanism — you write a struct.
 
 ## Reading a result
 
-```go
+```go mirror
 type Result[T any] struct {
     Data        T                        // typed, partially populated
     Valid       bool                     // every validation rule passed

@@ -37,7 +37,7 @@ is opt-in because it roughly doubles cost.
 Disagreement is recorded, never resolved silently
 (rule [§8.4](../rules.md#8-confidence-and-provenance)):
 
-```go
+```go mirror
 type FieldResult struct {
     Value       any
     Found       bool

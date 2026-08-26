@@ -55,6 +55,12 @@ pkg ovrin, const ReadingOCR Reading
 pkg ovrin, const ReadingText Reading
 pkg ovrin, const ReadingUnknown Reading
 pkg ovrin, const ReadingVision Reading
+pkg ovrin, const SignalAgreement string
+pkg ovrin, const SignalCrossField string
+pkg ovrin, const SignalFormat string
+pkg ovrin, const SignalGrounding string
+pkg ovrin, const SignalOCR string
+pkg ovrin, const SignalSchema string
 pkg ovrin, const YearFirst DateOrder
 pkg ovrin, func Bytes([]byte) Source
 pkg ovrin, func Extract[T any](context.Context, *Client, Source, ...Option) (*Result[T], error)
@@ -145,7 +151,7 @@ pkg ovrin, type FieldEvidence struct, Candidates []Candidate
 pkg ovrin, type FieldEvidence struct, Field string
 pkg ovrin, type FieldEvidence struct, Found bool
 pkg ovrin, type FieldEvidence struct, Grounding float64
-pkg ovrin, type FieldEvidence struct, OCRConf *float64
+pkg ovrin, type FieldEvidence struct, OCRConfidence *float64
 pkg ovrin, type FieldEvidence struct, Provenance []Provenance
 pkg ovrin, type FieldEvidence struct, Reading Reading
 pkg ovrin, type FieldEvidence struct, Suspicious bool
@@ -188,7 +194,7 @@ pkg ovrin, type OCR interface
 pkg ovrin, type OCR interface, Name() string
 pkg ovrin, type OCR interface, Recognise(context.Context, Page) (*Recognition, error)
 pkg ovrin, type Op string
-pkg ovrin, type Option func(*config)
+pkg ovrin, type Option interface
 pkg ovrin, type Page struct
 pkg ovrin, type Page struct, DPI int
 pkg ovrin, type Page struct, Height float64
@@ -256,6 +262,7 @@ pkg ovrin, var ErrAuth error
 pkg ovrin, var ErrBadRequest error
 pkg ovrin, var ErrBadResponse error
 pkg ovrin, var ErrEncrypted error
+pkg ovrin, var ErrInternal error
 pkg ovrin, var ErrLimitExceeded error
 pkg ovrin, var ErrNoContent error
 pkg ovrin, var ErrNoProvider error

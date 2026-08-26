@@ -138,7 +138,7 @@ unbounded recursion, a rule that cannot apply to its field's type.
 ## 5. Prompt
 
 **In:** the normalised content and the JSON Schema.
-**Out:** a `ModelRequest`.
+**Out:** a request, which the core converts into a `ModelRequest`.
 
 This stage is in the core and not in adapters, which is what makes the security
 property hold identically across every provider

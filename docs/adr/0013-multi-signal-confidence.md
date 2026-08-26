@@ -41,7 +41,7 @@ Confidence is computed from **named signals**, each recorded on the result, and
 combined by a **pluggable scorer**. No score is ever produced that the caller
 cannot decompose (rule [§8.1](../rules.md#8-confidence-and-provenance)).
 
-```go
+```go mirror
 type Signal struct {
     Name   string   // "ocr", "schema", "cross_field", "agreement", "format", "grounding"
     Value  float64  // 0..1

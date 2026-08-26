@@ -17,7 +17,7 @@ come out wrong" is unanswerable without it.
 
 ## Explain
 
-```go
+```go mirror
 func (r *Result[T]) Explain(field string) (*Explanation, bool)
 
 type Explanation struct {
@@ -72,7 +72,7 @@ it has taken a dependency we will break.
 
 ## Provenance
 
-```go
+```go mirror
 type Provenance struct {
     Reading Reading   // ReadingText, ReadingOCR, ReadingVision
     Page    int       // 1-based

@@ -81,6 +81,7 @@ Files are `NNNN-kebab-case-title.md`. Status is one of `Proposed`, `Accepted`,
 | [0027](0027-twelve-sentinels-and-one-op-vocabulary.md) | A twelfth sentinel, and one `Op` vocabulary | Accepted |
 | [0028](0028-reading-and-readingmode.md) | `Reading` and `ReadingMode` are different types | Accepted |
 | [0029](0029-v01-scope-corrected.md) | The v0.1 scope, corrected | Accepted |
+| [0030](0030-an-internal-failure-sentinel.md) | A thirteenth sentinel, for ovrin's own failures | Accepted |
 
 ## Open questions
 

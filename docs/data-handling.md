@@ -141,9 +141,9 @@ provide them.
 The design intent: **you cannot accidentally leak document content through
 ovrin's observability.**
 
-```go
+```go mirror
 type Event struct {
-    Op         string
+    Op         Op
     Provider   string
     Page       int
     Attempt    int

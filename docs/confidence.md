@@ -46,7 +46,7 @@ So confidence is built from several signals that fail in uncorrelated ways
 
 ## Signals
 
-```go
+```go mirror
 type Signal struct {
     Name   string
     Value  float64  // 0..1
@@ -196,11 +196,13 @@ The default scorer is a starting point. A user with labelled documents can fit
 a better one to their own corpus, and it will beat our defaults on their
 documents.
 
-```go
+```go mirror
 type Scorer interface {
     Score(f FieldEvidence) (confidence float64, signals []Signal)
 }
+```
 
+```go
 c := ovrin.New(ovrin.WithScorer(myScorer))
 ```
 

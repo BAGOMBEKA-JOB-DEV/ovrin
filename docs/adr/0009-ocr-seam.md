@@ -32,7 +32,7 @@ engine is built on.
 
 Two methods in the core, every implementation in its own module.
 
-```go
+```go mirror
 // OCR recovers text and layout from a rasterised page.
 //
 // Implementations must be safe for concurrent use by multiple goroutines.

@@ -24,7 +24,7 @@ unnameable, so the most common configuration is the one you cannot write down.
 
 Two types.
 
-```go
+```go mirror
 // Reading is how a value was actually read. It appears on Provenance
 // and Candidate, and describes the past.
 type Reading string

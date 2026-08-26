@@ -69,7 +69,7 @@ file.
 
 ## A Model adapter
 
-```go
+```go mirror
 type Model interface {
     Generate(ctx context.Context, req ModelRequest) (*ModelResponse, error)
 }
@@ -115,7 +115,7 @@ records the discrepancies.
 
 ## An OCR adapter
 
-```go
+```go mirror
 type OCR interface {
     Recognise(ctx context.Context, page Page) (*Recognition, error)
     Name() string
@@ -157,7 +157,7 @@ and records that it did.** It does not fabricate 1.0 (rule
 route that makes scanned PDFs work in v0.1 without a renderer
 ([ADR-0010](adr/0010-no-cgo-in-core.md)):
 
-```go
+```go mirror
 type DocumentOCR interface {
     OCR
     RecogniseDocument(ctx context.Context, doc Document) ([]*Recognition, error)
@@ -168,7 +168,7 @@ type DocumentOCR interface {
 
 ## A Renderer
 
-```go
+```go mirror
 type Renderer interface {
     Render(ctx context.Context, doc Document, page, dpi int) (image.Image, error)
 }

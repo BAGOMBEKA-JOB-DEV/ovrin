@@ -100,23 +100,40 @@ it, never a silent skip.
 
 ### `format`
 
-| Format | Accepts | Normalised to |
-|---|---|---|
-| `date` | most written and numeric date forms | `time.Time`, midnight UTC |
-| `datetime` | date with a time | `time.Time` |
-| `email` | RFC 5322 addressable form | lowercased |
-| `phone` | digits with separators, optional country code | E.164 where a country can be determined |
-| `currency` | ISO 4217 code | uppercased |
-| `iban`, `swift` | with checksum validation | uppercased, spaces removed |
-| `uuid` | any RFC 4122 form | lowercased, hyphenated |
+| Format | Accepts | Checked | Normalised to |
+|---|---|---|---|
+| `date` | most written and numeric date forms; a bare date on a `datetime` field | the calendar date is real — `31 February` is refused, never corrected | `time.Time`, midnight UTC. On a `string` field, RFC 3339 |
+| `datetime` | date with a time; a bare date at midnight UTC | as `date`, plus the clock | `time.Time` |
+| `email` | RFC 5322 addressable form | parsed, not pattern-matched; a display name is discarded | lowercased |
+| `phone` | digits with separators, optional country code | a trunk `(0)` is dropped, per that notation's own meaning | E.164 where `+` or `00` gives a country; national digits otherwise |
+| `currency` | ISO 4217 code | membership of the **active** list — withdrawn codes are refused so they reach review | uppercased |
+| `iban` | an IBAN | ISO 7064 mod-97-10, **and** the registered per-country length — mod-97 alone accepts a truncated IBAN once in 97 | uppercased, spaces removed |
+| `swift` | a BIC | structure, and the ISO 3166-1 country in positions 5–6. **ISO 9362 defines no checksum**, so none is claimed | uppercased, spaces removed |
+| `uuid` | any RFC 4122 textual form | the textual form only, so the nil and max UUIDs are accepted | lowercased, hyphenated |
 
 A value that cannot be parsed to the declared format sets `Valid` false and
 records the raw text on the field, so a reviewer sees what was actually there.
 
 **Ambiguous dates.** `03/04/2026` is 3 April or 4 March depending on locale.
-Ovrin does not guess: an ambiguous date produces a review reason and a lowered
-`format` signal. `WithDateOrder(ovrin.DayFirst)` resolves it for a corpus you
-know.
+Ovrin does not guess: **no value is produced**, both readings are recorded, a
+review reason is added, and the `format` signal drops. It does not drop to zero
+— the text is a well-formed date, and the only thing wrong is that the document
+did not say which one. `WithDateOrder(ovrin.DayFirst)` resolves it for a corpus
+you know.
+
+**Settled by implementation**, and stated here because the grammar alone does
+not imply them:
+
+- `min` and `max` on a string count **runes**, not bytes.
+- `enum` compares **exactly**, against the value *after* format normalisation.
+  So `format=currency,enum=UGX|USD` accepts `usd`, and a bare `enum=UGX|USD`
+  does not.
+- `required` on a slice is satisfied by a non-nil empty list — the document
+  said there were none. Its length is `min`'s business, not `required`'s.
+- An absent field is checked against `required` and nothing else. Reporting
+  `format=date failed` for a field the document does not contain is noise.
+- Numbers are refused rather than wrapped when they overflow the declared
+  width: `200` into an `int8` is a validation failure, not `-56`.
 
 ### `required` and absence
 
