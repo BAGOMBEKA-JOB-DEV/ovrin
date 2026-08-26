@@ -510,11 +510,10 @@ func (p *Provider) asynchronous(ctx context.Context, doc ovrin.Document) ([]bloc
 	}
 
 	raw, err := p.call(ctx, targetStart, startRequest{
-		DocumentLocation: documentLocation{S3Object: s3Object{
-			Bucket:  loc.Bucket,
-			Name:    loc.Name,
-			Version: loc.Version,
-		}},
+		// A conversion rather than a field-by-field literal: if S3Object ever
+		// gains a field, this stops compiling until someone decides what the
+		// wire should do with it. The literal would silently drop it.
+		DocumentLocation: documentLocation{S3Object: s3Object(loc)},
 	}, 0)
 	if err != nil {
 		return nil, 0, nil, err

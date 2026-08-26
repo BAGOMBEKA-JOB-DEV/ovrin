@@ -86,27 +86,134 @@ with, see [SECURITY.md](SECURITY.md#which-go-toolchain-you-need).)
 
 ## Development
 
-Every command this repository runs is a `make` target, and CI calls those same
-targets — so a green run here is a green run there.
+**Every command in this project is a `make` target.** Nothing is hidden in a
+script or a CI file — the [`Makefile`](Makefile) is the single definition, and
+[CI calls these same targets](.github/workflows/ci.yml), so a green run on your
+machine is a green run on the build.
+
+### Setting up
 
 ```bash
-make            # list every target
-make setup      # sign-off hook, plus golangci-lint and govulncheck at CI's versions
-make check      # the gate: fmt, build, vet under every tag, tests, lint, vuln, docs
-make ci         # the above, plus coverage floor, zero-dependency and cross-compile checks
+git clone https://github.com/BAGOMBEKA-JOB-DEV/ovrin.git
+cd ovrin
+
+make setup      # commit sign-off hook + golangci-lint and govulncheck at CI's versions
+make check      # the whole gate, across all nine modules
 ```
 
-Or run it all in a container, with the Go, Python and linter versions pinned
-and nothing to install:
+That is the entire setup. **No credentials are needed to build or test** —
+the default suite runs against in-process fakes and loopback servers, offline
+([ADR-0022](docs/adr/0022-offline-testing.md)).
+
+Run `make` with no arguments at any time to list every target.
+
+### The two you will use most
+
+| Command | What it does |
+|---|---|
+| `make check` | The gate to pass before opening a pull request: `gofmt`, build, `go vet` under every build tag, tests with the race detector, tests over real sockets, `go mod tidy`, `golangci-lint`, `govulncheck`, documentation checks — **for every module**. |
+| `make ci` | Everything above **plus** what only CI used to do: the coverage floor, the zero-dependency assertion, and the cgo-free cross-compile. |
+
+### Every target
+
+**Getting started**
+
+| Command | What it does |
+|---|---|
+| `make` / `make help` | List every target |
+| `make setup` | Install the sign-off hook and both tools |
+| `make hooks` | Just the `Signed-off-by` commit hook |
+| `make tools` | Just `golangci-lint` and `govulncheck`, at the versions CI pins |
+
+**Build and test**
+
+| Command | What it does |
+|---|---|
+| `make build` | Compile every module |
+| `make test` | The offline suite, with the race detector |
+| `make test-sandbox` | The same over real sockets, against an adversarial fake server |
+| `make test-cover` | The suite with a coverage profile — what CI runs |
+| `make cover-floor` | Assert coverage is at or above 85% |
+| `make cover-html` | Open the coverage profile in a browser |
+| `make bench` | Benchmarks (`render/pdfium`) |
+| `make fuzz` | Every fuzz target; `FUZZTIME=5m make fuzz` to run longer |
+| `make test-integration` | Against real providers. **Costs money** |
+| `make eval` | Accuracy against the corpus. **Needs `OPENAI_API_KEY`, costs money** |
+
+**Quality** — each is one step of CI
+
+| Command | What it does |
+|---|---|
+| `make fmt` | Format every module |
+| `make fmt-check` | Fail if anything is not `gofmt`'d |
+| `make vet` | `go vet` under every build tag |
+| `make lint` | `golangci-lint` |
+| `make vuln` | `govulncheck` |
+| `make tidy` / `make tidy-check` | `go mod tidy`; the check fails if it left a diff |
+| `make deps-check` | Assert the core has zero external dependencies |
+| `make cross` | Assert it builds with `CGO_ENABLED=0` for linux/arm64, darwin/arm64, windows/amd64 |
+
+**Documentation and generated files**
+
+| Command | What it does |
+|---|---|
+| `make docs` | Check links, citations, ADR hygiene and API references |
+| `make api` | Regenerate [`api/ovrin.txt`](api/ovrin.txt) from the source |
+| `make corpus` | Regenerate the synthetic evaluation corpus |
+| `make report` | Regenerate the committed no-run evaluation report |
+
+**Running and releasing**
+
+| Command | What it does |
+|---|---|
+| `make run-example` | Extract [the example receipt](examples/receipt) with a real model. Needs `OPENAI_API_KEY` |
+| `make release-check VERSION=v0.2.0` | Report whether the tree is fit to tag. Never tags, never pushes |
+| `make clean` | Remove build and coverage output |
+
+**Docker** — the toolchain pinned, nothing to install
+
+| Command | What it does |
+|---|---|
+| `make docker-build` | Build the image |
+| `make docker-ci` | The whole gate, in a container |
+| `make docker-shell` | A shell with the toolchain, your checkout mounted |
+| `make docker-test` | Just the test suites |
+| `make docker-test-offline` | The suite with `--network=none`, proving it needs no network |
+| `make docker-example` | The receipt example. Pass `OPENAI_API_KEY` through |
+| `make docker-eval` | The evaluation harness, with `eval/report` mounted back out |
+| `make docker-clean` | Remove the images |
+
+The container is worth knowing about for one specific reason: it ships
+Tesseract's English language data, so the six engine-backed tests in
+`ocr/tesseract` that skip on a machine without a language pack actually run
+there.
+
+### Working on one module
+
+The repository is nine Go modules. Every target loops over all of them; pass
+`MODULES` to narrow it, which is exactly how CI's matrix invokes them:
 
 ```bash
-make docker-ci      # the whole gate, in Docker
-make docker-shell   # a shell with the toolchain, your checkout mounted
+make test MODULES=ocr/azure
+make build MODULES="ocr/azure ocr/textract"
 ```
 
-No credentials are needed to build or test. The default suite is entirely
-offline — in-process fakes and loopback servers — which
-`make docker-test-offline` proves by running it with no network at all.
+### Environment variables
+
+None are needed for `make check`. These matter only for the targets that
+contact a real provider:
+
+| Variable | Used by | Notes |
+|---|---|---|
+| `OPENAI_API_KEY` | `make run-example`, `make eval` | Required by both; they refuse to start without it |
+| `OPENAI_BASE_URL` | `make eval` | Defaults to `https://api.openai.com/v1` |
+| `OVRIN_MODEL` | `make run-example` | Defaults to `gpt-5.2` |
+| `OVRIN_EVAL_MODEL` | `make eval` | Defaults to `gpt-5.2` |
+
+Adapters never read the environment themselves — every credential is a
+function argument ([`rules.md` §6.4](docs/rules.md#6-adapters)). The variables
+above are read by the example programme and the evaluation harness, which are
+programmes rather than library code.
 
 ## Inputs
 

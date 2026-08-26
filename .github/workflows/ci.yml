@@ -132,7 +132,9 @@ jobs:
       - name: test
         run: make test-cover MODULES=${{ matrix.module }}
 
-      # docs/rules.md §3.7 — never lower this to make a red build green.
+      # docs/rules.md §3.7 — never lower this to make a red build green. The
+      # floor and the list of packages excluded from the measurement both live
+      # in the Makefile, with the reasoning beside them.
       - name: coverage floor
         if: matrix.module == '.' && matrix.go == '1.27'
         run: make cover-floor

@@ -244,8 +244,8 @@ func WithTessdataDirs(dirs ...string) Option {
 // WithTrainingData supplies the traineddata directly, skipping the filesystem
 // search entirely.
 //
-// This is the reproducible option and the one to prefer. Combined with
-// go:embed it produces a single binary that reads scans with no filesystem
+// This is the reproducible option and the one to prefer. Combined with an
+// [embed.FS] it produces a single binary that reads scans with no filesystem
 // dependency, no package manager and no network — which is the whole claim
 // this module exists to make.
 //

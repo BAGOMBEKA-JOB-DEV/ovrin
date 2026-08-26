@@ -2,6 +2,7 @@ package textract
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
@@ -288,7 +289,7 @@ func classifyStatus(code int) error {
 // limit whatever the body says.
 func classifyException(status int, e *apiError) error {
 	kind := classifyStatus(status)
-	if kind != ovrin.ErrBadRequest {
+	if !errors.Is(kind, ovrin.ErrBadRequest) {
 		return kind
 	}
 	switch e.exception() {

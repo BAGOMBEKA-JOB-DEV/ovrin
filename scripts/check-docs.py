@@ -262,6 +262,48 @@ def check_fence_markers(docs):
     notes.append(f"{sketches} go fences are marked `sketch` (exempt from checking)")
 
 
+def check_make_targets():
+    """Every `make X` a document names must be a real target, and every target
+    must be documented in the README.
+
+    The Makefile exists so that a command is written down once. That only holds
+    while the README describing the targets and the Makefile defining them
+    agree, and nothing else would notice them drifting apart: a `make deploy`
+    in a document is not a broken link and not a failing build, it is simply an
+    instruction that does nothing.
+    """
+    makefile = os.path.join(ROOT, "Makefile")
+    if not os.path.exists(makefile):
+        return
+
+    declared = set()
+    for line in open(makefile):
+        m = re.match(r"^([a-zA-Z0-9][a-zA-Z0-9_-]*):", line)
+        if m:
+            declared.add(m.group(1))
+
+    # Targets that exist as plumbing and need no entry of their own.
+    internal = {"tools-lint", "tools-vuln"}
+
+    documented = set()
+    for p in markdown_files():
+        text = open(p, encoding="utf-8").read()
+        for target in re.findall(r"`make ([a-z][a-z0-9-]*)", text):
+            documented.add(target)
+            if target not in declared:
+                fail(rel(p), f"`make {target}` is documented but is not a target "
+                             f"in the Makefile")
+
+    readme = os.path.join(ROOT, "README.md")
+    in_readme = set(re.findall(r"`make ([a-z][a-z0-9-]*)",
+                               open(readme, encoding="utf-8").read()))
+    for target in sorted(declared - in_readme - internal - {"help"}):
+        fail("README.md", f"`make {target}` is a target but is not documented "
+                          f"in the README")
+
+    notes.append(f"checked {len(declared)} make targets against the documentation")
+
+
 def main() -> int:
     docs = markdown_files()
     check_fences(docs)
@@ -271,6 +313,7 @@ def main() -> int:
     check_api_references(docs)
     check_layout_trees()
     check_fence_markers(docs)
+    check_make_targets()
 
     quiet = "--quiet" in sys.argv
     if not quiet:
