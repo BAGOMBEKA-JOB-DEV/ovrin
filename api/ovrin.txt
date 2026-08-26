@@ -21,6 +21,8 @@ pkg ovrin, const CellRowHeader CellKind
 pkg ovrin, const CellUnknown CellKind
 pkg ovrin, const DateOrderUnknown DateOrder
 pkg ovrin, const DayFirst DateOrder
+pkg ovrin, const DefaultBreakerCooldown int
+pkg ovrin, const DefaultBreakerFailures int
 pkg ovrin, const DefaultMaxDecompressedBytes int64
 pkg ovrin, const DefaultMaxDepth int
 pkg ovrin, const DefaultMaxObjects int
@@ -78,8 +80,11 @@ pkg ovrin, const WeightOCR float64
 pkg ovrin, const WeightSchema float64
 pkg ovrin, const YearFirst DateOrder
 pkg ovrin, func Before(string, string) CrossFieldRule
+pkg ovrin, func BreakModel(Model, ...BreakerOption) Model
+pkg ovrin, func BreakOCR(OCR, ...BreakerOption) OCR
 pkg ovrin, func Bytes([]byte) Source
 pkg ovrin, func CrossFieldFunc(string, func(CrossFields) CrossFieldResult) CrossFieldRule
+pkg ovrin, func ExtractBatch[T any](context.Context, *Client, []Source, ...Option) []BatchResult[T]
 pkg ovrin, func Extract[T any](context.Context, *Client, Source, ...Option) (*Result[T], error)
 pkg ovrin, func File(string) Source
 pkg ovrin, func ModelChain(...Model) Model
@@ -88,6 +93,8 @@ pkg ovrin, func OCRChain(...OCR) OCR
 pkg ovrin, func Reader(io.Reader) Source
 pkg ovrin, func Sum(string, Tolerance, ...string) CrossFieldRule
 pkg ovrin, func SumItems(string, string, Tolerance, ...string) CrossFieldRule
+pkg ovrin, func WithBreakerCooldown(time.Duration) BreakerOption
+pkg ovrin, func WithBreakerFailures(int) BreakerOption
 pkg ovrin, func WithConcurrency(int) Option
 pkg ovrin, func WithCrossField(...CrossFieldRule) Option
 pkg ovrin, func WithDateOrder(DateOrder) Option
@@ -125,6 +132,11 @@ pkg ovrin, method (Layout) At(Ref) (Cell, bool)
 pkg ovrin, method (Layout) Ref(int, Cell) Ref
 pkg ovrin, method (Op) String() string
 pkg ovrin, method (Reading) String() string
+pkg ovrin, type BatchResult[T any] struct
+pkg ovrin, type BatchResult[T any] struct, Err error
+pkg ovrin, type BatchResult[T any] struct, Index int
+pkg ovrin, type BatchResult[T any] struct, Result *Result[T]
+pkg ovrin, type BreakerOption func(*breaker)
 pkg ovrin, type Candidate struct
 pkg ovrin, type Candidate struct, Reading Reading
 pkg ovrin, type Candidate struct, Source Provenance

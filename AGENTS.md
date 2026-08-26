@@ -124,6 +124,8 @@ ovrin/                     module github.com/BAGOMBEKA-JOB-DEV/ovrin
 ├── source.go              Source, Document, Kind, detection
 ├── model.go   ocr.go   render.go      THE SEAMS — CODEOWNER-protected
 ├── chain.go               OCRChain, ModelChain
+├── breaker.go             BreakOCR, BreakModel — the same seam, one level down
+├── batch.go               ExtractBatch over many sources at once
 ├── layout.go              Layout, Table, KeyValue across the OCR seam
 ├── pipeline.go            stage orchestration — root package on purpose
 ├── assemble.go            the schema walk: validate, ground, score, write

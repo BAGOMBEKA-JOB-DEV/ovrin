@@ -24,6 +24,8 @@ ovrin/                        module github.com/BAGOMBEKA-JOB-DEV/ovrin
 ├── ocr.go                    the OCR seam              ── ADR-0009
 ├── render.go                 the Renderer seam         ── ADR-0010
 ├── chain.go                  OCRChain, ModelChain      ── ADR-0018
+├── breaker.go                BreakOCR, BreakModel      ── ADR-0018
+├── batch.go                  ExtractBatch
 ├── layout.go                 Layout, Table, KeyValue across the OCR seam
 ├── pipeline.go               stage orchestration       ── ADR-0002
 ├── assemble.go               the schema walk: validate, ground, score, write
