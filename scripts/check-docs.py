@@ -202,8 +202,10 @@ def check_api_references(docs):
         # Explicit escape hatch, for a migration note or a quotation of a
         # superseded API. Suppresses the rest of its own line and the fenced
         # block immediately following, if any.
-        text = re.sub(r"<!-- api-check: ignore -->[^\n]*\n(?:\s*```.*?```)?", "",
-                      text, flags=re.S)
+        text = re.sub(
+            r"<!-- api-check: ignore -->[^\n]*\n"
+            r"(?:\s*```.*?```|(?:[^\n]+\n)*)",
+            "", text, flags=re.S)
         for m in re.finditer(r"\bovrin\.([A-Z]\w*)", text):
             name = m.group(1)
             referenced += 1

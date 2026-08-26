@@ -55,7 +55,9 @@ behaviour ADR-0012 specifies can be written down and asked for explicitly.
 [§1.9](../rules.md#1-public-api) requires.
 
 <!-- api-check: ignore -->
-Existing usage changes: `WithReading(ovrin.ReadingBoth)` becomes `WithReading(ovrin.ModeBoth)`, and `WithReading(ovrin.ReadingVision)` becomes `WithReading(ovrin.ModeVision)`.
+Existing usage changes: `WithReading(ovrin.ReadingBoth)` becomes
+`WithReading(ovrin.ModeBoth)`, and `WithReading(ovrin.ReadingVision)` becomes
+`WithReading(ovrin.ModeVision)`.
 
 ## Consequences
 
