@@ -14,6 +14,7 @@ not started; see the [status section](../README.md#status).
 | [schema.md](schema.md) | You are writing a struct and need the tag grammar |
 | [confidence.md](confidence.md) | You are deciding what to do with a score |
 | [explainability.md](explainability.md) | You are building review or audit on top |
+| [observability.md](observability.md) | You are wiring up traces, metrics or hooks |
 | [architecture.md](architecture.md) | You want to know how it fits together |
 | [pipeline.md](pipeline.md) | You want to know what happens to a document |
 | [providers.md](providers.md) | You are writing an adapter |

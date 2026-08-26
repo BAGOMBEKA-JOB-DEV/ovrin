@@ -63,7 +63,7 @@ first time somebody found it convenient. Field *names* are countable and appear
 as `Fields`; field *values* are not representable.
 
 The metric and span names `ovrin/otel` emits are listed in
-[`docs/observability`](../architecture.md) and treated as API: renaming one
+[`docs/observability.md`](../observability.md) and treated as API: renaming one
 breaks dashboards, so it is a breaking change.
 
 ## Consequences

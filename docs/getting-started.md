@@ -4,7 +4,7 @@
 > experience. Nothing below works today; see the
 > [README's status section](../README.md#status).
 >
-> Sections marked <sup>v0.2</sup> or <sup>v0.3</sup> describe features that will
+> Sections opening with a **v0.2** or **v0.3** note describe features that will
 > not be in the first release. Everything unmarked is v0.1 scope, and the
 > documentation checks in CI enforce that — an unmarked example may not use a
 > feature [`feature-matrix.md`](feature-matrix.md) marks ⛔ for the current
@@ -216,7 +216,10 @@ of one bad one.
 
 ---
 
-## Two readings <sup>v0.3</sup>
+## Two readings
+
+> **v0.3.** Cross-validation needs two independent readings; see
+> [ADR-0029](adr/0029-v01-scope-corrected.md).
 
 When a value being wrong has a real consequence, run two independent readings
 and compare them ([ADR-0014](adr/0014-cross-validation.md)):
@@ -242,7 +245,10 @@ This roughly doubles cost and latency, which is why it is opt-in.
 
 ---
 
-## Provider fallback <sup>v0.2</sup>
+## Provider fallback
+
+> **v0.2.** Chains are a decorator over the seam
+> ([ADR-0018](adr/0018-fallback-is-a-decorator.md)).
 
 A chain is an ordinary provider, so the pipeline cannot tell the difference
 ([ADR-0018](adr/0018-fallback-is-a-decorator.md)):

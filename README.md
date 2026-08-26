@@ -147,9 +147,14 @@ Signals
   schema       1.00  ×0.15   float64, min=0 satisfied
   cross_field  1.00  ×0.05   line items sum to total
   format       1.00  ×0.05   parsed as currency
+  agreement       —          only one reading
 
 Provenance
   ocr:tesseract   page 1   box (412,688)-(486,702)   exact
+
+Validation
+  required  pass
+  min=0     pass
 ```
 
 ---
@@ -165,6 +170,7 @@ Provenance
 | [Schemas](docs/schema.md) | The tag grammar and the rule vocabulary |
 | [Confidence](docs/confidence.md) | Signals, weights, and what the number does not mean |
 | [Explainability](docs/explainability.md) | Provenance, review, and audit |
+| [Observability](docs/observability.md) | Hooks, spans and metric names — all of them API |
 | [Threat model](docs/threat-model.md) | Prompt injection, resource limits, exfiltration |
 | [Data handling](docs/data-handling.md) | What leaves the process, and to whom |
 | [Providers](docs/providers.md) | Writing an adapter |

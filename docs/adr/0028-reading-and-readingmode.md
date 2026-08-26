@@ -54,9 +54,8 @@ behaviour ADR-0012 specifies can be written down and asked for explicitly.
 `ReadingUnknown` is the unknown member rule
 [§1.9](../rules.md#1-public-api) requires.
 
-Existing usage changes: `WithReading(ovrin.ReadingBoth)` becomes
-`WithReading(ovrin.ModeBoth)`, and `WithReading(ovrin.ReadingVision)` becomes
-`WithReading(ovrin.ModeVision)`.
+<!-- api-check: ignore -->
+Existing usage changes: `WithReading(ovrin.ReadingBoth)` becomes `WithReading(ovrin.ModeBoth)`, and `WithReading(ovrin.ReadingVision)` becomes `WithReading(ovrin.ModeVision)`.
 
 ## Consequences
 

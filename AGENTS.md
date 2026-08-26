@@ -125,6 +125,7 @@ ovrin/                     module github.com/BAGOMBEKA-JOB-DEV/ovrin
 ├── confidence.go          Signal, Scorer
 ├── provenance.go          Provenance, Rect, Span
 ├── limits.go  hook.go  errors.go
+├── example_test.go        runnable documentation — rules.md §9.3
 │
 ├── internal/              ← put implementation HERE by default
 │   ├── pdf/               text-layer extraction

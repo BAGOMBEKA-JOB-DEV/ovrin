@@ -15,6 +15,7 @@ func Extract[T any](ctx context.Context, c *Client, src Source) (*Result[T], err
 [`docs/getting-started.md`](../getting-started.md) then showed a call with four,
 because the feature it was demonstrating needs one:
 
+<!-- api-check: ignore -->
 ```go
 res, err := ovrin.Extract[Invoice](ctx, client, src,
     ovrin.WithReading(ovrin.ReadingBoth),
