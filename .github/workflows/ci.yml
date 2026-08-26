@@ -50,20 +50,52 @@ jobs:
       - name: check documentation
         run: python3 scripts/check-docs.py
 
+  # Every module in the repository, found rather than listed.
+  #
+  # A hand-written matrix goes stale the moment somebody adds an adapter, and
+  # the failure is silent: the module is simply never built. Discovery makes
+  # "we forgot to add it to CI" impossible.
+  #
+  # Each module is built at its OWN declared floor and at the newest release.
+  # Testing only the newest lets a floor become a lie — code using a Go 1.26
+  # feature compiles on 1.26 while go.mod claims 1.22, and the first user on
+  # 1.22 discovers it.
+  discover:
+    name: discover modules
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.find.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - id: find
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, re
+
+          newest = "1.27"
+          entries = []
+          for base, dirs, files in os.walk("."):
+              dirs[:] = [d for d in dirs if d not in {".git", "testdata"}]
+              if "go.mod" not in files:
+                  continue
+              path = os.path.relpath(base, ".")
+              text = open(os.path.join(base, "go.mod")).read()
+              m = re.search(r"^go (\d+\.\d+)", text, re.M)
+              floor = m.group(1) if m else newest
+              entries.append({"module": path, "go": floor})
+              if floor != newest:
+                  entries.append({"module": path, "go": newest})
+          entries.sort(key=lambda e: (e["module"], e["go"]))
+          print("matrix=" + json.dumps({"include": entries}))
+          PY
+
   build:
     name: build ${{ matrix.module }} @ go${{ matrix.go }}
     runs-on: ubuntu-latest
-    if: hashFiles('go.mod') != ''
+    needs: discover
     strategy:
       fail-fast: false
-      # Every module is built at its DECLARED FLOOR and at the newest release.
-      # Testing only the newest lets a floor silently become a lie: code using
-      # a Go 1.26 feature compiles fine on 1.26 while go.mod claims 1.22, and
-      # the first person on 1.22 discovers it.
-      matrix:
-        include:
-          - { module: ".", go: "1.22" }
-          - { module: ".", go: "1.27", cover: true, floor: 85 }
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
@@ -105,29 +137,33 @@ jobs:
             -coverpkg=./... -covermode=atomic -coverprofile=cover.out ./...
 
       - name: coverage floor
-        if: matrix.cover
+        if: matrix.module == '.' && matrix.go == '1.27' 
         working-directory: ${{ matrix.module }}
         run: |
           # Test-support packages inflate the number without testing anything.
           grep -vE '/internal/(adaptertest|sandbox|testutil)/' cover.out > c.out
           pct=$(go tool cover -func=c.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
-          echo "coverage ${pct}% (floor ${{ matrix.floor }}%)"
+          echo "coverage ${pct}% (floor 85%)"
           # docs/rules.md §3.7 — never lower this to make a red build green.
-          awk -v p="$pct" -v f="${{ matrix.floor }}" \
+          awk -v p="$pct" -v f="85" \
             'BEGIN { if (p+0 < f+0) { print "::error::coverage below floor"; exit 1 } }'
 
   tidy:
     name: tidy
     runs-on: ubuntu-latest
-    if: hashFiles('go.mod') != ''
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
-        with: { go-version: "${{ env.GO_VERSION }}" }
-      - run: |
+        with: { go-version: "${{ matrix.go }}" }
+      - working-directory: ${{ matrix.module }}
+        run: |
           go mod tidy
           git diff --exit-code || {
-            echo "::error::go mod tidy left a diff — commit it"; exit 1; }
+            echo "::error::go mod tidy left a diff in ${{ matrix.module }} — commit it"; exit 1; }
 
   deps:
     name: core has zero dependencies
@@ -161,7 +197,10 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
-    if: hashFiles('go.mod') != ''
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
@@ -169,18 +208,22 @@ jobs:
       - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb0f9e6e3b # v9
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: ${{ matrix.module }}
 
   vuln:
     name: govulncheck
     runs-on: ubuntu-latest
-    if: hashFiles('go.mod') != ''
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
         with: { go-version: "${{ env.GO_VERSION }}" }
-      - run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-          govulncheck ./...
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      - working-directory: ${{ matrix.module }}
+        run: govulncheck ./...
 
   # The single check branch protection requires. Naming each job in the
   # repository settings means that list silently goes stale every time a
@@ -190,10 +233,11 @@ jobs:
     name: ci-ok
     runs-on: ubuntu-latest
     if: always()
-    needs: [docs, build, tidy, deps, lint, vuln]
+    needs: [docs, discover, build, tidy, deps, lint, vuln]
     steps:
       - run: |
-          for r in '${{ needs.docs.result }}' '${{ needs.build.result }}' \
+          for r in '${{ needs.docs.result }}' '${{ needs.discover.result }}' \
+                   '${{ needs.build.result }}' \
                    '${{ needs.tidy.result }}' '${{ needs.deps.result }}' \
                    '${{ needs.lint.result }}' '${{ needs.vuln.result }}'; do
             case "$r" in

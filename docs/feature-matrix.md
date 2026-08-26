@@ -55,20 +55,40 @@ silently relaxed constraint.
 
 ## OCR adapters
 
-| Capability | `tesseract` | `google` | `aws` | `azure` |
+Only `google` and `tesseract` exist. `textract` and `azure` are v0.2 items not
+yet started, and are listed so the shape of the seam is visible — every cell in
+their columns is a plan, not a measurement.
+
+| Capability | `google` | `tesseract` | `textract` | `azure` |
 |---|---|---|---|---|
-| Word text | ✅ | ✅ | ✅ | ✅ |
-| Word bounding boxes | ✅ | ✅ | ✅ | ✅ |
-| Per-word confidence | ✅ | ✅ | ✅ | ✅ |
-| Reading order | ✅ | ✅ | ✅ | ✅ |
-| Accepts a PDF directly (no local renderer) | ⛔ | ✅ | ✅ | ✅ |
-| Language hints | ✅ | ✅ | ⚠️ inferred, not settable per request | ✅ |
-| Handwriting | ⚠️ poor; Tesseract is built for print | ✅ | ✅ | ✅ |
-| Table structure | ⛔ | ⚠️ detected by the provider, **discarded** by ovrin's `Recognition` | ⚠️ same | ⚠️ same |
-| Key-value pairs | ⛔ | ⚠️ same | ⚠️ same | ⚠️ same |
-| Provider-side entity extraction | ⛔ not used — see below | ⛔ | ⛔ | ⛔ |
-| Runs offline | ✅ | ⛔ | ⛔ | ⛔ |
-| Requires cgo [^cgo] | yes | no | no | no |
+| **Built** | ✅ | ✅ | ⛔ not started | ⛔ not started |
+| Word text | ✅ | ✅ | — | — |
+| Word bounding boxes | ✅ | ✅ | — | — |
+| Per-word confidence | ✅ | ✅ | — | — |
+| Reading order | ⚠️ blocks and paragraphs are sorted; lines within a block keep the provider's order, so a two-column page is approximate | ✅ | — | — |
+| Accepts a PDF whole (no local renderer) | ✅ **PDF only** — TIFF and GIF are refused with `ErrUnsupported`, because Vision reports their geometry in pixels with no resolution and it could not be converted to points | ⛔ | — | — |
+| Pages per document call | ⚠️ **5 maximum.** Google's synchronous endpoint truncates silently beyond that, so a document with more is refused rather than half-read | — | — | — |
+| Language hints | ✅ | ✅ | — | — |
+| Handwriting | ✅ | ⚠️ poor; Tesseract is built for print | — | — |
+| Table structure | ⚠️ detected by the provider, **discarded** by ovrin's `Recognition` | ⛔ | — | — |
+| Key-value pairs | ⚠️ same | ⛔ | — | — |
+| Per-symbol geometry, block types, per-block languages | ⚠️ **silently ignored** — reachable only through `Recognition.Raw` | ⛔ | — | — |
+| Page-unit billing | ⚠️ not reported; `Recognition` gained a `Usage` field in v0.2 and the adapter does not yet fill it | ⚠️ same | — | — |
+| Provider-side entity extraction | ⛔ deliberately unused — see below | ⛔ | — | — |
+| Runs offline | ⛔ | ✅ | ⛔ | ⛔ |
+| Requires cgo [^cgo] | no | see the module's own documentation | — | — |
+| Module dependencies | **none but `ovrin`** — REST over `net/http`, no Google SDK | — | — | — |
+
+**Authentication is where standard-library-only costs something.** `ocr/google`
+takes an API key directly, and a service account through
+`WithTokenSource(func(ctx) (string, error))` — so ADC, workload identity and
+the rest work, but `golang.org/x/oauth2/google` lands in **your** `go.mod`
+rather than the adapter's. Reimplementing service-account JWT signing inside an
+OCR adapter would be security-relevant code in the wrong place.
+
+**Google reports per-page failures inside an HTTP 200.** An adapter classifying
+on status alone would report a permission failure as a blank scan. Both the
+status code and the per-response gRPC code are classified.
 
 **The table and key-value rows are the honest ones.** Document AI, Textract and
 Azure all return richer structure than ovrin's `Recognition` carries, and
