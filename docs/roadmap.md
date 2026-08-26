@@ -12,9 +12,13 @@ what order, and what is still owed.
 
 Work outside this repository that later phases depend on.
 
-- [ ] **Rename the GitHub repository** from `vellum` to `ovrin`. Until this is
-      done the module path does not resolve
-      ([ADR-0001](adr/0001-name-and-module-path.md)).
+- [x] **Rename the GitHub repository** from `vellum` to `ovrin`, done
+      2026-08-26. `github.com/BAGOMBEKA-JOB-DEV/ovrin` now resolves, so the
+      module path, both README badges and the advisory link in
+      [`SECURITY.md`](../SECURITY.md) reach a repository that exists
+      ([ADR-0001](adr/0001-name-and-module-path.md)). GitHub redirects the old
+      URL, but a clone made before the rename should update its remote:
+      `git remote set-url origin https://github.com/BAGOMBEKA-JOB-DEV/ovrin.git`
 - [x] ~~**Tag skyl v0.2.0**~~ — not needed. `Request.ResponseFormat` is already
       in skyl `v0.1.0`; the claim that it was not was an error, corrected in
       [ADR-0008](adr/0008-skyl-is-an-adapter.md). `model/skyl` requires the real

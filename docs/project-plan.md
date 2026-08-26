@@ -55,8 +55,7 @@ that is what everything below is about.
 
 | Item | Blocked on | Owner |
 |---|---|---|
-| Module path resolving | GitHub repository still named `vellum`; must be renamed to `ovrin` | maintainer |
-| Tagged releases | The rename, which changes the path every tag would be under | maintainer |
+| Tagged releases | A dated `CHANGELOG.md` section and a decision on the first version — `make release-check VERSION=v0.3.0` reports both | maintainer |
 | Any accuracy statement | Every corpus document is synthetic; nothing has been run against a real one | maintainer, contributors |
 | Confidence calibration | A real corpus, then a calibration run | — |
 | v1.0 | All four [ADR-0024](adr/0024-versioning-and-stability.md) conditions; none is established yet | — |
@@ -72,10 +71,12 @@ accuracy claim.
 
 In order. Each is a prerequisite for the one after it in the same group.
 
-**1. Unblock the name.**
-- Rename the GitHub repository to `ovrin`, update the remote
-- Verify every documentation link still resolves after the rename
-- Drop the `replace` directives once the core has a tag the adapters can name
+**1. Cut the first release.** The name is no longer a blocker — the repository
+was renamed to `ovrin` on 2026-08-26 and the module path resolves.
+- Date the `[Unreleased]` section in `CHANGELOG.md` as `[0.3.0]`
+- `make release-check VERSION=v0.3.0`, then tag and push by hand
+- Wait for the proxy, then tag each adapter, then `examples/receipt`
+- Drop each module's `replace` directive as its turn comes
 
 **2. Get real documents into the corpus.**
 - Public government and regulator forms first: they are redistributable, they

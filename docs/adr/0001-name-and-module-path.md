@@ -74,9 +74,11 @@ confusion is likely even though the categories differ. The two obvious domains
 are gone. And the name has the shape of the invented-startup-name pattern the
 project originally set out to avoid.
 
-The GitHub repository is still named `vellum` and must be renamed before the
-module path resolves. That is the maintainer's action, tracked in
-[`docs/project-plan.md`](../project-plan.md).
+The GitHub repository was renamed from `vellum` to `ovrin` on 2026-08-26, and
+`github.com/BAGOMBEKA-JOB-DEV/ovrin` resolves. GitHub redirects the old URL
+indefinitely, but a Go module path is not resolved through a redirect the way a
+browser follows one — the rename is what made `go get` work, not the redirect.
+A clone taken before it should update its remote.
 
 ## Alternatives considered
 
