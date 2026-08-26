@@ -157,7 +157,7 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 		Reading:    a.out.reading,
 		Grounding:  gr.Grounding,
 		Validation: ruleResults(vr.Rules),
-		Suspicious: a.suspect[gr.Page] || a.suspect[0],
+		Suspicious: a.suspicious(),
 	}
 	if gr.Applicable {
 		ev.Provenance = []Provenance{provenanceOf(gr, a.out.reading, a.out.provider)}
@@ -240,6 +240,18 @@ func (a *assembler) crossField() {
 	}
 }
 
+// suspicious reports whether the document carried hidden content.
+//
+// It is deliberately document-wide rather than per-page. Keying it on the
+// field's own page was wrong twice over: a value that could not be grounded
+// has no page at all — and those are exactly the fields an injection is most
+// likely to have produced — and the instruction an attacker hid on page one is
+// read by the model along with everything else, so there is no way to know
+// which value it moved.
+func (a *assembler) suspicious() bool {
+	return len(a.suspect) > 0
+}
+
 func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result, gr ground.Result, conf float64) {
 	add := func(why string) { a.reasons = append(a.reasons, ReviewReason{Field: key, Why: why}) }
 
@@ -252,8 +264,8 @@ func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result
 	if vr.Ambiguity != nil {
 		add("the date is ambiguous and ovrin will not guess which reading is meant")
 	}
-	if a.suspect[gr.Page] || a.suspect[0] {
-		add("the source page carried content that looked like an injection attempt")
+	if a.suspicious() {
+		add("the source carried content that looked like an injection attempt")
 	}
 	if conf < a.cfg.reviewThreshold && vr.Found {
 		add("confidence is below the review threshold")

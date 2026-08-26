@@ -420,6 +420,58 @@ func TestCancellation(t *testing.T) {
 	}
 }
 
+// TestCancellationDuringRender is the one that matters: a context cancelled
+// after PDFium has started work on a page.
+//
+// Render cannot interrupt PDFium — no PDFium entry point takes a context — so
+// what is asserted is that the caller is released promptly rather than made to
+// wait for a page it no longer wants. The page is chosen to take far longer to
+// render than the deadline allowed for returning.
+func TestCancellationDuringRender(t *testing.T) {
+	t.Parallel()
+
+	doc := corpusDoc(t, corpusPDFs(t)[0])
+	r := pdfium.New(pdfium.WithInstances(1), pdfium.WithMaxPagePixels(0))
+	defer func() {
+		if err := r.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	}()
+
+	// Warm the runtime, and find out how long an uncancelled render of this
+	// page takes, so the assertion below is relative to this machine rather
+	// than to a number guessed on another one.
+	start := time.Now()
+	if _, err := r.Render(context.Background(), doc, 1, 900); err != nil {
+		t.Fatalf("warming: %v", err)
+	}
+	full := time.Since(start)
+	if full < 100*time.Millisecond {
+		t.Skipf("a 900 dpi page renders in %v here, too fast to cancel reliably", full)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(full / 10)
+		cancel()
+	}()
+
+	start = time.Now()
+	img, err := r.Render(ctx, doc, 1, 900)
+	elapsed := time.Since(start)
+
+	if img != nil {
+		t.Error("an image was returned for a cancelled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want errors.Is(err, context.Canceled)", err)
+	}
+	if elapsed > full/2 {
+		t.Errorf("Render took %v to return after %v, with a full render taking %v; "+
+			"cancellation is being recorded rather than acted on", elapsed, full/10, full)
+	}
+}
+
 // TestNoLeaksAcrossManyRenders asserts the two things a WebAssembly runtime
 // makes easy to leak: goroutines, and PDFium instances.
 //
