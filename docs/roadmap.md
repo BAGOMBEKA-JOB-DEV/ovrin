@@ -78,15 +78,18 @@ cross-validation (v0.3), provider fallback chains (v0.2), local rasterising
 
 ## v0.2 — Make it usable on real documents
 
-- [ ] **Local rasterising** — `render/pdfium`, PDFium under Wazero. This is
+- [x] **Local rasterising** — `render/pdfium`, PDFium under Wazero. This is
       what makes offline and air-gapped scanned-document processing possible
       ([ADR-0010](adr/0010-no-cgo-in-core.md)).
-- [ ] `ocr/tesseract`
+- [x] `ocr/tesseract` — and it needs **no cgo**: Tesseract compiled to
+      WebAssembly under a pure-Go runtime, so the whole offline path
+      cross-compiles
 - [ ] `ocr/textract`, `ocr/azure`
-- [ ] Date-order handling for ambiguous dates
-- [ ] Per-field provenance with bounding boxes from every reading
-- [ ] Provider fallback chains ([ADR-0018](adr/0018-fallback-is-a-decorator.md))
-- [ ] `otel` module
+- [x] Date-order handling for ambiguous dates
+- [x] Per-field provenance with bounding boxes, for every reading that
+      supplies geometry — vision supplies none, by its nature
+- [x] Provider fallback chains ([ADR-0018](adr/0018-fallback-is-a-decorator.md))
+- [x] `otel` module
 
 ---
 
