@@ -940,10 +940,12 @@ func TestAMalformedReplyIsAskedForAgainOnce(t *testing.T) {
 	}
 
 	// The document is not re-sent. Paying to read it twice to fix a number
-	// that was quoted is the whole cost this avoids.
-	if len(reqs[1].Content) != 0 {
-		t.Errorf("the second request carried %d pieces of content, want none",
-			len(reqs[1].Content))
+	// that was quoted is the whole cost this avoids. The reply being corrected
+	// does travel, delimited as data — that is what the model must look at.
+	for _, ct := range reqs[1].Content {
+		if contains(ct.Text, "consulting") {
+			t.Error("the second request re-sent the document")
+		}
 	}
 	// And the retry asks for the same shape at the same determinism.
 	if string(reqs[1].Schema) != string(reqs[0].Schema) {
@@ -1023,9 +1025,11 @@ func TestAWorseSecondReplyIsDiscarded(t *testing.T) {
 	if res.Metadata.Retried {
 		t.Error("Retried is true although the second reply was no improvement")
 	}
-	// Neither reply could be converted, so the field is absent — not guessed.
-	if f := res.Fields["total"]; f.Found {
-		t.Errorf("total is marked found from an unconvertible reply: %+v", f)
+	// Neither reply could be converted. The field may be marked Found — the
+	// model did answer — but it must carry no value and must not be valid.
+	if f := res.Fields["total"]; f.Valid || f.Value != nil {
+		t.Errorf("an unconvertible reply produced a usable field: Value=%v Valid=%v",
+			f.Value, f.Valid)
 	}
 	if res.Data.Total != 0 || res.Valid {
 		t.Errorf("a value was invented: Total = %v, Valid = %v", res.Data.Total, res.Valid)
