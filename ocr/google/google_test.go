@@ -255,11 +255,8 @@ func TestProviderContract(t *testing.T) {
 		New: func(baseURL string) ovrin.OCR {
 			return New(testAPIKey, WithBaseURL(baseURL))
 		},
-		NewDocument: func(baseURL string, content []byte) ovrin.DocumentOCR {
-			return New(testAPIKey, WithBaseURL(baseURL),
-				WithDocumentContent(func(context.Context, ovrin.Document) ([]byte, error) {
-					return content, nil
-				}))
+		NewDocument: func(baseURL string) ovrin.DocumentOCR {
+			return New(testAPIKey, WithBaseURL(baseURL))
 		},
 		APIKey:       testAPIKey,
 		ProviderName: providerName,
@@ -434,13 +431,17 @@ func TestRefusalsRatherThanDegradedResults(t *testing.T) {
 			want: ovrin.ErrUnsupported,
 		},
 		{
-			name: "a document whose bytes were never supplied",
+			// Not ErrUnsupported: this provider reads documents perfectly
+			// well, it was simply handed one with nothing in it. Saying
+			// "unsupported" would send the caller looking for a provider that
+			// does support documents, which is the wrong fix.
+			name: "a document carrying no bytes",
 			call: func(p *Provider) error {
 				_, err := p.RecogniseDocument(context.Background(),
 					ovrin.Document{Kind: ovrin.KindPDF, Pages: 1})
 				return err
 			},
-			want: ovrin.ErrUnsupported,
+			want: ovrin.ErrNoContent,
 		},
 	}
 

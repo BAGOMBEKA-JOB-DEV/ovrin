@@ -292,7 +292,7 @@ func TestProviderContract(t *testing.T) {
 		// that reads more than a page, accepts an Amazon S3 object and has no
 		// field for a document's bytes. So the two-page fixture below travels
 		// the S3 route, and TestSynchronousDocument covers the inline one.
-		NewDocument: func(baseURL string, _ []byte) ovrin.DocumentOCR {
+		NewDocument: func(baseURL string) ovrin.DocumentOCR {
 			return New(testRegion, testCredentials(), WithBaseURL(baseURL),
 				WithPageSize(pageWidth, pageHeight),
 				WithDocumentLocation(func(context.Context, ovrin.Document) (S3Object, error) {

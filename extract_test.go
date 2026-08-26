@@ -827,8 +827,7 @@ func TestDOCXNeedsNeitherOCRNorRenderer(t *testing.T) {
 
 	// The text is quoted from the document, so it grounds verbatim. A format
 	// whose text is exact should score at the top of the grounding scale.
-	f := res.Fields["Vendor"]
-	t.Logf("fields=%v found=%v conf=%.2f signals=%v", keysOf(res.Fields), f.Found, f.Confidence, f.Evidence)
+	f := res.Fields["vendor"]
 	if f.Confidence < 0.8 {
 		t.Errorf("Vendor confidence = %.2f, want >= 0.8 for text taken verbatim", f.Confidence)
 	}
@@ -886,12 +885,4 @@ func TestHiddenDOCXTextIsExtractedAndFlagged(t *testing.T) {
 	if !found {
 		t.Errorf("no reason mentions hidden text; reasons = %v", res.Reasons)
 	}
-}
-
-func keysOf[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }

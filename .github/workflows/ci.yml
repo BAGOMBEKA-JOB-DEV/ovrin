@@ -102,7 +102,15 @@ jobs:
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
         with:
           go-version: ${{ matrix.go }}
-          cache-dependency-path: ${{ matrix.module }}/go.sum
+          # go.mod is listed first because it is the only one of the two
+          # guaranteed to exist. Most modules here have no go.sum at all --
+          # zero dependencies is the rule for the core (docs/rules.md 4.1) and
+          # the habit everywhere else -- and setup-go fails the step when its
+          # dependency path resolves to nothing. go.sum is still listed so that
+          # a module which has one gets the more precise cache key.
+          cache-dependency-path: |
+            ${{ matrix.module }}/go.mod
+            ${{ matrix.module }}/go.sum
 
       - name: gofmt
         working-directory: ${{ matrix.module }}

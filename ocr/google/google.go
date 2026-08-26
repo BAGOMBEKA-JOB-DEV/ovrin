@@ -229,9 +229,9 @@ func WithLanguageHints(codes ...string) Option {
 // documents concurrently, and so that a caller streaming from disk or object
 // storage does not have to buffer every document in advance.
 //
-// Without it, [Provider.RecogniseDocument] returns [ovrin.ErrUnsupported]
-// naming what it could not do, rather than returning nothing and calling it an
-// empty document.
+// Without it, [Provider.RecogniseDocument] reads [ovrin.Document.Data], which
+// ovrin populates on every path. The option exists for a caller driving this
+// adapter directly with a document it would rather not buffer twice.
 func WithDocumentContent(fn func(ctx context.Context, doc ovrin.Document) ([]byte, error)) Option {
 	return func(p *Provider) { p.document = fn }
 }
@@ -350,19 +350,19 @@ func (p *Provider) RecogniseDocument(ctx context.Context, doc ovrin.Document) ([
 				"reads at most %d; the rest would be dropped silently",
 				doc.Pages, maxSyncPages))
 	}
-	if p.document == nil {
-		return nil, p.fail(ovrin.ErrUnsupported, 0,
-			"no document content is configured; ovrin.Document carries a document's "+
-				"size but not its bytes, so pass WithDocumentContent")
-	}
-
-	content, err := p.document(ctx, doc)
-	if err != nil {
-		// The caller's own error is attached rather than described: it is
-		// theirs to read, and nothing here may quote it into a message that
-		// could carry the document (rule §2.5).
-		return nil, p.fail(ovrin.ErrNoContent, 0,
-			"the document content could not be read").WithCause(err)
+	// The bytes normally arrive on the document itself. WithDocumentContent
+	// overrides that for a caller who would rather fetch them another way.
+	content := doc.Data
+	if p.document != nil {
+		var err error
+		content, err = p.document(ctx, doc)
+		if err != nil {
+			// The caller's own error is attached rather than described: it is
+			// theirs to read, and nothing here may quote it into a message
+			// that could carry the document (rule §2.5).
+			return nil, p.fail(ovrin.ErrNoContent, 0,
+				"the document content could not be read").WithCause(err)
+		}
 	}
 	if len(content) == 0 {
 		return nil, p.fail(ovrin.ErrNoContent, 0, "the document is empty")

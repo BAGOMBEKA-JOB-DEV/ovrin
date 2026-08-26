@@ -33,9 +33,17 @@ type Result[T any] struct {
 	Confidence float64
 
 	// Fields holds one entry per schema field, including fields that were not
-	// found. A slice field additionally contributes one entry per extracted
-	// element, keyed "items[0]", so the number of keys depends on what was
-	// read.
+	// found.
+	//
+	// Keys are the Go field path in snake case, not the description from the
+	// ovrin tag: a field declared UnitPrice float64 `ovrin:"price per unit"`
+	// is Fields["unit_price"]. The tag describes the field to the model and is
+	// free to be reworded; the Go name is the caller's own identifier and does
+	// not change under them when a description is improved.
+	//
+	// A nested struct is keyed with a dot ("vendor.name") and a slice field
+	// additionally contributes one entry per extracted element ("items[0]"),
+	// so the number of keys depends on what was read. See docs/schema.md.
 	Fields map[string]FieldResult
 
 	// NeedsReview reports whether a person should look before this is used.

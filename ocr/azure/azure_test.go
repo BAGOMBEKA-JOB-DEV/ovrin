@@ -312,7 +312,7 @@ func TestProviderContract(t *testing.T) {
 		},
 		// The bytes are not used: this adapter reads a document from
 		// [ovrin.Document.Data], which is where the core already holds it.
-		NewDocument: func(baseURL string, _ []byte) ovrin.DocumentOCR {
+		NewDocument: func(baseURL string) ovrin.DocumentOCR {
 			return New(baseURL, testKey, WithPollInterval(time.Millisecond))
 		},
 		APIKey:       testKey,
