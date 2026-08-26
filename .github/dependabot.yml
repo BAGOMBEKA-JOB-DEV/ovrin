@@ -1,0 +1,64 @@
+version: 2
+
+updates:
+  # GitHub Actions are pinned by commit SHA (docs/rules.md §4.5), which means
+  # they never update on their own and would silently rot without this.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # The core module has zero dependencies (docs/rules.md §4.1), so this entry
+  # exists to notice if that ever stops being true.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # Adapter modules. Each has its own go.mod, so each needs its own entry.
+  # Adding a module means adding a block here — CI will not tell you.
+  - package-ecosystem: gomod
+    directory: /model/skyl
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: gomod
+    directory: /ocr/tesseract
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: gomod
+    directory: /ocr/google
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: gomod
+    directory: /render/pdfium
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: gomod
+    directory: /otel
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope

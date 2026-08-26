@@ -1,0 +1,81 @@
+# golangci-lint configuration for ovrin.
+#
+# The linter set is deliberately small. A lint rule nobody believes in gets
+# suppressed everywhere and stops meaning anything, so this file contains only
+# rules that catch real defects and that a reviewer would raise anyway.
+#
+# Adding a linter is a pull request that says which defect it caught.
+
+version: "2"
+
+run:
+  # Files behind these tags are real code. A tagged file that nobody lints
+  # rots, and the rot is only discovered when someone runs the tagged suite.
+  # docs/rules.md §11.2
+  build-tags:
+    - integration
+    - sandbox
+    - eval
+
+linters:
+  default: none
+  enable:
+    # Unchecked errors. rules.md §2.4 — never discard an error.
+    - errcheck
+
+    # The standard vet suite.
+    - govet
+
+    # Assignments that are never used. Almost always a bug.
+    - ineffassign
+
+    # Deep static analysis. The single highest-value linter here.
+    - staticcheck
+
+    # Unused identifiers.
+    - unused
+
+    # HTTP response bodies that are never closed. Every adapter makes HTTP
+    # calls, and a leaked body is a leaked connection.
+    - bodyclose
+
+    # errors.Is/As misuse, and %v where %w was meant. rules.md §2.1 depends
+    # on wrapping being correct, and this is the only automated check of it.
+    - errorlint
+
+    # Misspellings in comments and strings. Doc comments are the API.
+    - misspell
+
+    # Returning nil after checking that an error is non-nil. A subtle,
+    # genuinely dangerous mistake that reads as correct.
+    - nilerr
+
+    # Unnecessary type conversions.
+    - unconvert
+
+    # http.MethodGet over "GET", and similar. Catches typos the compiler
+    # cannot.
+    - usestdlibvars
+
+  settings:
+    errcheck:
+      # An unchecked type assertion panics. rules.md §1.6 permits exactly one
+      # panic in this codebase, and it is not this one.
+      check-type-assertions: true
+
+    staticcheck:
+      checks:
+        - all
+
+  exclusions:
+    rules:
+      # In tests, an unchecked error on a helper is usually noise, and a
+      # response body that outlives the test is closed by the server.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - bodyclose
+
+formatters:
+  enable:
+    - gofmt

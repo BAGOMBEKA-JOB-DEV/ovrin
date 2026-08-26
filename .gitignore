@@ -1,0 +1,31 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+/bin/
+/dist/
+
+# Test and coverage output
+*.test
+*.out
+coverage.*
+/eval/report/*.local.*
+
+# Fuzzing corpus additions found by the fuzzer
+testdata/fuzz/
+
+# Go workspace — local to each contributor
+go.work
+go.work.sum
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Environment
+.env
+.env.*

@@ -1,0 +1,46 @@
+# Verifies that every commit in a pull request carries a Signed-off-by trailer.
+# docs/rules.md §10.4.
+#
+# Hand-rolled rather than using an action, because this is fifteen lines of
+# git and a third-party action in the trust path of every contribution is a
+# poor trade.
+
+name: DCO
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          # Need the full range between base and head to inspect each commit.
+          fetch-depth: 0
+
+      - name: every commit is signed off
+        run: |
+          fail=0
+          # --no-merges: a merge commit is created by GitHub, not by the
+          # contributor, so requiring a sign-off on one is meaningless.
+          for sha in $(git rev-list --no-merges \
+                       ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}); do
+            author="$(git show -s --format='%an <%ae>' "$sha")"
+            if ! git show -s --format='%B' "$sha" | grep -qiF "Signed-off-by: $author"; then
+              echo "::error::$(git show -s --format='%h %s' "$sha")"
+              echo "  missing: Signed-off-by: $author"
+              fail=1
+            fi
+          done
+          if [ $fail -ne 0 ]; then
+            echo ""
+            echo "Fix with:  git rebase --signoff origin/main"
+            echo "Avoid next time:  git config core.hooksPath .githooks"
+          fi
+          exit $fail

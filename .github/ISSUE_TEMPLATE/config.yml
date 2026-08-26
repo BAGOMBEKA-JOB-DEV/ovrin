@@ -1,0 +1,18 @@
+blank_issues_enabled: true
+
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/security/advisories/new
+    about: Privately, through GitHub Security Advisories. Never as a public issue.
+
+  - name: Documentation
+    url: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/tree/main/docs
+    about: The design, the pipeline, the schema grammar and 25 decision records.
+
+  - name: Why is it like this?
+    url: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/tree/main/docs/adr
+    about: Most "why not X" questions already have an ADR, with the alternatives that lost.
+
+  - name: Contribute a document to the evaluation corpus
+    url: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/blob/main/docs/evaluation.md#contributing-documents
+    about: The most valuable contribution. Read the licensing requirements first.

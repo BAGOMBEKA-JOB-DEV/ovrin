@@ -1,0 +1,240 @@
+# Continuous integration for ovrin.
+#
+# Every non-obvious choice below has a comment explaining the failure it
+# prevents. A CI file nobody understands is a CI file people disable.
+#
+# NOTE: this repository currently contains documentation only. The Go jobs are
+# written and will do nothing useful until there is a go.mod. The docs job
+# works today and is the one that matters right now.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*", "*/v*"]
+  pull_request:
+    branches: [main]
+
+# Least privilege at the top; individual jobs escalate only if they must.
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.27"
+  GOLANGCI_LINT_VERSION: "v2.12.2"
+  # Modules must build in isolation, exactly as a user gets them. A go.work
+  # file would silently resolve inter-module dependencies from the working
+  # tree, so a module could pass CI while being unbuildable once published.
+  GOWORK: "off"
+
+jobs:
+  # Runs today. Everything else is waiting for code.
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Every relative link resolves
+        run: |
+          fail=0
+          while IFS= read -r line; do
+            f="${line%%:*}"; l="${line#*:}"
+            case "$l" in http*|mailto:*|"#"*) continue ;; esac
+            t="${l%%#*}"
+            [ -z "$t" ] && continue
+            d="$(dirname "$f")"
+            if [ ! -e "$d/$t" ]; then
+              echo "::error file=$f::broken link: $t"
+              fail=1
+            fi
+          done <<< "$(grep -rHoE '\]\([^)]+\)' --include='*.md' . \
+                     | sed -E 's/\]\((.*)\)$/:\1/')"
+          exit $fail
+
+      - name: Code fences balance
+        run: |
+          fail=0
+          for f in $(find . -name '*.md' -not -path './.git/*'); do
+            n=$(grep -c '^```' "$f" || true)
+            if [ $((n % 2)) -ne 0 ]; then
+              echo "::error file=$f::unbalanced code fences ($n)"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Every ADR is indexed, and every index row has a file
+        run: |
+          ls docs/adr/[0-9]*.md | sed -E 's#.*/([0-9]{4}).*#\1#' | sort > /tmp/have
+          grep -oE '^\| \[0[0-9]{3}\]' docs/adr/README.md \
+            | tr -d '|[] ' | sort > /tmp/listed
+          diff /tmp/have /tmp/listed || {
+            echo "::error::docs/adr/README.md index is out of sync"; exit 1; }
+
+      - name: Every ADR has all four sections and names a cost
+        run: |
+          fail=0
+          for f in docs/adr/[0-9]*.md; do
+            for s in '## Context' '## Decision' '## Consequences' '## Alternatives considered'; do
+              grep -q "^$s" "$f" || { echo "::error file=$f::missing $s"; fail=1; }
+            done
+            # docs/rules.md §9.4 — an ADR that lists no downsides has not
+            # finished thinking.
+            grep -q '\*\*Bad\.\*\*' "$f" || {
+              echo "::error file=$f::no downsides listed"; fail=1; }
+          done
+          exit $fail
+
+  build:
+    name: build ${{ matrix.module }} @ go${{ matrix.go }}
+    runs-on: ubuntu-latest
+    if: hashFiles('go.mod') != ''
+    strategy:
+      fail-fast: false
+      # Every module is built at its DECLARED FLOOR and at the newest release.
+      # Testing only the newest lets a floor silently become a lie: code using
+      # a Go 1.26 feature compiles fine on 1.26 while go.mod claims 1.22, and
+      # the first person on 1.22 discovers it.
+      matrix:
+        include:
+          - { module: ".", go: "1.22" }
+          - { module: ".", go: "1.27", cover: true, floor: 85 }
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      - name: gofmt
+        working-directory: ${{ matrix.module }}
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "$out" | while read -r f; do echo "::error file=$f::not gofmt'd"; done
+            exit 1
+          fi
+
+      - name: build
+        working-directory: ${{ matrix.module }}
+        run: go build ./...
+
+      # Tagged files are real code. Vetting only the untagged build lets them
+      # rot until someone runs the tagged suite months later.
+      - name: vet
+        working-directory: ${{ matrix.module }}
+        run: |
+          go vet ./...
+          go vet -tags=sandbox ./...
+          go vet -tags=integration ./...
+          go vet -tags=eval ./...
+
+      # -count=1 defeats the test cache; a cached pass proves nothing about
+      # this commit. The sandbox tag exercises the full stack over real
+      # sockets without credentials or cost.
+      - name: test
+        working-directory: ${{ matrix.module }}
+        run: |
+          go test -count=1 -race -tags=sandbox \
+            -coverpkg=./... -covermode=atomic -coverprofile=cover.out ./...
+
+      - name: coverage floor
+        if: matrix.cover
+        working-directory: ${{ matrix.module }}
+        run: |
+          # Test-support packages inflate the number without testing anything.
+          grep -vE '/internal/(adaptertest|sandbox|testutil)/' cover.out > c.out
+          pct=$(go tool cover -func=c.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
+          echo "coverage ${pct}% (floor ${{ matrix.floor }}%)"
+          # docs/rules.md §3.7 — never lower this to make a red build green.
+          awk -v p="$pct" -v f="${{ matrix.floor }}" \
+            'BEGIN { if (p+0 < f+0) { print "::error::coverage below floor"; exit 1 } }'
+
+  tidy:
+    name: tidy
+    runs-on: ubuntu-latest
+    if: hashFiles('go.mod') != ''
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
+        with: { go-version: "${{ env.GO_VERSION }}" }
+      - run: |
+          go mod tidy
+          git diff --exit-code || {
+            echo "::error::go mod tidy left a diff — commit it"; exit 1; }
+
+  deps:
+    name: core has zero dependencies
+    runs-on: ubuntu-latest
+    if: hashFiles('go.mod') != ''
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
+        with: { go-version: "${{ env.GO_VERSION }}" }
+
+      # docs/rules.md §4.1. This is the property most likely to be lost by
+      # accident and hardest to reverse once users depend on it, so it is a
+      # job rather than a review comment.
+      - name: no external requires
+        run: |
+          if go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./... \
+             | grep -v '^github.com/BAGOMBEKA-JOB-DEV/ovrin' | grep .; then
+            echo "::error::the core module must have zero external dependencies"
+            exit 1
+          fi
+
+      # docs/rules.md §4.3. Static builds and cross-compilation are why a lot
+      # of people choose Go, and a transitive cgo dependency breaks both.
+      - name: builds without cgo, cross-compiled
+        env: { CGO_ENABLED: "0" }
+        run: |
+          GOOS=linux   GOARCH=arm64 go build ./...
+          GOOS=darwin  GOARCH=arm64 go build ./...
+          GOOS=windows GOARCH=amd64 go build ./...
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    if: hashFiles('go.mod') != ''
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
+        with: { go-version: "${{ env.GO_VERSION }}" }
+      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb0f9e6e3b # v9
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+
+  vuln:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    if: hashFiles('go.mod') != ''
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
+        with: { go-version: "${{ env.GO_VERSION }}" }
+      - run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          govulncheck ./...
+
+  # The single check branch protection requires. Naming each job in the
+  # repository settings means that list silently goes stale every time a
+  # module or a Go version is added — and a stale required-checks list is a
+  # branch protection rule that protects nothing.
+  ci-ok:
+    name: ci-ok
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [docs, build, tidy, deps, lint, vuln]
+    steps:
+      - run: |
+          for r in '${{ needs.docs.result }}' '${{ needs.build.result }}' \
+                   '${{ needs.tidy.result }}' '${{ needs.deps.result }}' \
+                   '${{ needs.lint.result }}' '${{ needs.vuln.result }}'; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::a required job did not pass ($r)"; exit 1 ;;
+            esac
+          done

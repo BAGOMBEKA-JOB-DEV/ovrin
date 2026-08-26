@@ -1,0 +1,43 @@
+#!/bin/sh
+#
+# Appends a Signed-off-by trailer, as required by the Developer Certificate of
+# Origin. docs/rules.md §10.4, enforced by .github/workflows/dco.yml.
+#
+# This hook is OPT-IN and must stay that way:
+#
+#     git config core.hooksPath .githooks
+#
+# Git does not run hooks from a cloned repository by default, and that is a
+# security property rather than an inconvenience — a repository that could
+# execute code on clone would be a supply-chain attack waiting to happen. So
+# this file cannot install itself, and CONTRIBUTING.md asks you to enable it.
+#
+# If you would rather not, `git commit -s` does the same thing by hand.
+
+set -e
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+
+# Leave merges, squashes and `git commit -c` alone — their messages either
+# already carry a sign-off or are not ours to edit.
+case "$COMMIT_SOURCE" in
+    merge|squash|commit) exit 0 ;;
+esac
+
+NAME="$(git config user.name)"
+EMAIL="$(git config user.email)"
+
+if [ -z "$NAME" ] || [ -z "$EMAIL" ]; then
+    echo "prepare-commit-msg: user.name and user.email must be set to sign off" >&2
+    exit 1
+fi
+
+TRAILER="Signed-off-by: $NAME <$EMAIL>"
+
+# Idempotent: amending a commit must not add the trailer twice.
+if grep -qxF "$TRAILER" "$COMMIT_MSG_FILE"; then
+    exit 0
+fi
+
+printf '\n%s\n' "$TRAILER" >> "$COMMIT_MSG_FILE"

@@ -1,0 +1,20 @@
+# Every change is reviewed by the maintainer. With a bus factor of one this is
+# not a bottleneck we chose, it is a fact we are recording. See MAINTAINERS.md.
+
+*                       @BAGOMBEKA-JOB-DEV
+
+# Load-bearing files. These encode decisions rather than implementation, and a
+# change to one of them changes what the project is. Listing them separately
+# does not add a second reviewer today — it marks them so that when there is
+# one, the boundary is already drawn.
+
+/docs/rules.md          @BAGOMBEKA-JOB-DEV
+/docs/adr/              @BAGOMBEKA-JOB-DEV
+/model.go               @BAGOMBEKA-JOB-DEV
+/ocr.go                 @BAGOMBEKA-JOB-DEV
+/render.go              @BAGOMBEKA-JOB-DEV
+/errors.go              @BAGOMBEKA-JOB-DEV
+/SECURITY.md            @BAGOMBEKA-JOB-DEV
+/RELEASING.md           @BAGOMBEKA-JOB-DEV
+/AGENTS.md              @BAGOMBEKA-JOB-DEV
+/.github/               @BAGOMBEKA-JOB-DEV
