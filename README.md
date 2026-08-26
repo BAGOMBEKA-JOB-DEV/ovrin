@@ -167,7 +167,7 @@ Run `make` with no arguments at any time to list every target.
 | Command | What it does |
 |---|---|
 | `make run-example` | Extract [the example receipt](examples/receipt) with a real model. Needs `OPENAI_API_KEY` |
-| `make release-check VERSION=v0.2.0` | Report whether the tree is fit to tag. Never tags, never pushes |
+| `make release-check VERSION=v0.3.0` | Report whether the tree is fit to tag. Never tags, never pushes. Takes a module-prefixed tag too, e.g. `model/skyl/v0.1.0` |
 | `make clean` | Remove build and coverage output |
 
 **Docker** — the toolchain pinned, nothing to install
@@ -232,8 +232,8 @@ programmes rather than library code.
 | PDF with a text layer | yes | read directly — exact and nearly free |
 | PNG, JPEG, TIFF | yes | OCR or vision |
 | Scanned PDF | yes, via cloud OCR | providers that accept a PDF rasterise server-side |
-| Scanned PDF, offline | v0.2 | needs a local renderer |
-| DOCX, XLSX, CSV | v0.3 | |
+| Scanned PDF, offline | yes | `render/pdfium` rasterises locally, `ocr/tesseract` reads — neither needs cgo or a network |
+| DOCX, XLSX, CSV | yes | read directly; no OCR and no renderer |
 
 Document *types* are never hardcoded. Invoices, receipts, government forms,
 transcripts, bank statements, medical forms and contracts are all the same
@@ -320,7 +320,7 @@ Validation
 | [Evaluation](docs/evaluation.md) | How accuracy is measured |
 | [Roadmap](docs/roadmap.md) | What is next, and what is deliberately deferred |
 | [Rules](docs/rules.md) | The engineering rules this codebase is held to |
-| [Decisions](docs/adr/) | 25 ADRs — why it is like this |
+| [Decisions](docs/adr/) | 31 ADRs — why it is like this |
 | [Glossary](docs/glossary.md) | Terms used throughout |
 
 Contributors and coding agents should start with [`AGENTS.md`](AGENTS.md).
@@ -330,15 +330,16 @@ Contributors and coding agents should start with [`AGENTS.md`](AGENTS.md).
 ## Status
 
 **Pre-v1.** The library is implemented — nine Go modules, the core with zero
-dependencies, and every feature on the roadmap through v0.3 — on top of thirty
-architecture decision records that were written before the code.
+dependencies, and every feature on the roadmap through v0.3 — on top of thirty-one
+architecture decision records, most of them written before the code.
 
 What that means concretely:
 
 - **No release is tagged yet.** The install commands above will not resolve
   until one is. Until then, build from a checkout.
-- **The API is described, not specified, but it is not stable.** It will change
-  as it meets real documents.
+- **The API is not stable.** What the documentation shows is what the code
+  does — the two are checked against each other on every commit — but it will
+  change as it meets real documents.
 - **No accuracy figure has been published**, and none will be until the
   evaluation harness can reproduce it ([ADR-0023](docs/adr/0023-evaluation-corpus.md)).
 - **Confidence weights are provisional.** Confidence is a ranking signal today,

@@ -14,7 +14,7 @@ and it is the most important fact about the project's sustainability.
 What reduces the risk:
 
 - **Apache-2.0.** Anyone can fork, at any time, for any reason.
-- **The architecture is documented.** Twenty-five ADRs record not just what was
+- **The architecture is documented.** Thirty-one ADRs record not just what was
   decided but why, and what it cost. A fork inherits the reasoning, not just
   the code.
 - **Zero dependencies in the core.** There is very little that can rot

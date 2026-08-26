@@ -46,6 +46,11 @@ COVERAGE_FLOOR ?= 85
 # a gate.
 FUZZTIME ?= 60s
 
+# How long Go may spend shrinking a newly interesting input before it goes back
+# to fuzzing. The default is unbounded in practice, and in internal/pdf that
+# swallowed almost the whole budget. See the fuzz target.
+FUZZMINIMIZETIME ?= 2s
+
 # Built binaries go here rather than beside their source. `go build ./...`
 # inside examples/receipt drops a 9MB binary in the tree, and that binary
 # reached git six times before anybody noticed.
@@ -184,19 +189,24 @@ bench: ## Run benchmarks (render/pdfium is the only package with any)
 
 .PHONY: fuzz
 fuzz: ## Fuzz every target for FUZZTIME each (default 60s)
-	@set -e; for t in \
-		internal/prompt:FuzzBuild \
-		internal/pdf:FuzzPDF \
-		internal/pdf:FuzzContent \
-		internal/pdf:FuzzCMap \
-		internal/img:FuzzDecode \
-		internal/compare:FuzzCompare \
-		internal/detect:FuzzDetect \
-		internal/office:FuzzOffice \
-		internal/normalise:FuzzNormalise; do \
-		pkg=$${t%%:*}; fn=$${t##*:}; \
-		printf '\033[1m==> %s %s\033[0m\n' "$$pkg" "$$fn"; \
-		$(GO) test -run='^$$' -fuzz="^$$fn$$" -fuzztime=$(FUZZTIME) "./$$pkg"; \
+	@# Targets are discovered, not listed, for the same reason modules are: a
+	@# hand-written list goes stale silently, and a fuzz target nobody runs is
+	@# worse than none because it looks like coverage.
+	@#
+	@# -fuzzminimizetime is capped. Go minimises every newly interesting input
+	@# before continuing, and in internal/pdf that minimisation is pathological
+	@# — measured at roughly a hundredfold fewer executions with the default,
+	@# so most of the budget went to shrinking inputs rather than finding them.
+	@# A crasher minimised for two seconds is still a reproducer.
+	@set -e; \
+	targets=$$(grep -rho '^func Fuzz[A-Za-z0-9_]*' --include='*_test.go' . \
+		| sed 's/^func //' | sort -u); \
+	for fn in $$targets; do \
+		for pkg in $$(grep -rl "^func $$fn(" --include='*_test.go' . | xargs -n1 dirname | sort -u); do \
+			printf '\033[1m==> %s %s\033[0m\n' "$$pkg" "$$fn"; \
+			$(GO) test -run='^$$' -fuzz="^$$fn$$" -fuzztime=$(FUZZTIME) \
+				-fuzzminimizetime=$(FUZZMINIMIZETIME) "$$pkg"; \
+		done; \
 	done
 
 .PHONY: test-integration
