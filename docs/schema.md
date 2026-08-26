@@ -41,7 +41,9 @@ The first element is the description. Every element after it is a rule
 A comma inside a description is written `\,`; a literal backslash is `\\`.
 
 ```go
-Address string `ovrin:"street\, city and postcode,required"`
+type Applicant struct {
+    Address string `ovrin:"street\, city and postcode,required"`
+}
 ```
 
 This is the grammar's one wart. A description needing several commas is usually

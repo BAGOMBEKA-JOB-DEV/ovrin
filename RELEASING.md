@@ -84,7 +84,7 @@ You cannot unpublish. The options, in order of preference:
 1. **Fix forward.** Release the next patch immediately.
 2. **Retract**, for a version that is actively harmful:
 
-   ```go
+   ```text
    retract v0.2.0 // Extracted values could reach trace attributes.
    ```
 
