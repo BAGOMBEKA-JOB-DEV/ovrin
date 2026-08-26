@@ -1,12 +1,14 @@
 # Binaries
 #
-# `go build ./...` drops a binary named after each main package in the
-# working directory. examples/receipt is the one that exists today.
+# `go build ./...` drops a binary named after each main package in the working
+# directory. examples/receipt is the one that exists today.
 #
-# Unanchored on purpose: the binary lands in examples/receipt/, not at the
-# repository root, and a leading slash here matched neither it nor anything
-# else. It reached git six times before that was noticed.
-receipt
+# Named by its full path, because the two shorter forms are both wrong. A
+# leading `/receipt` anchors to the repository root and matched nothing — which
+# is how a 9MB binary reached git six times. A bare `receipt` matches at any
+# depth and therefore matches the *directory* examples/receipt/, quietly making
+# every new file in it invisible to `git add`.
+examples/receipt/receipt
 *.exe
 *.dll
 *.so

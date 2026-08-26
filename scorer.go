@@ -82,7 +82,12 @@ func (defaultScorer) Score(f FieldEvidence) (float64, []Signal) {
 	add(SignalSchema, schemaValue, WeightSchema, schemaNote(f.Validation))
 
 	if v, ok := formatSignal(f.Validation); ok {
-		add(SignalFormat, v, WeightFormat, "the declared format parsed")
+		note := "the declared format parsed"
+		if f.Ambiguous {
+			// Not a failure. The value parsed; it parsed two ways.
+			v, note = validate.AmbiguousFormatSignal, "the declared format parsed, but ambiguously"
+		}
+		add(SignalFormat, v, WeightFormat, note)
 	}
 	if f.Agreement != nil {
 		note := f.AgreementNote
@@ -114,7 +119,19 @@ func (defaultScorer) Score(f FieldEvidence) (float64, []Signal) {
 	if ruleFailed {
 		cap(CapRuleFailed, "capped:rule", "a declared rule failed")
 	}
-	if f.Grounding == ground.NotFound && len(f.Provenance) == 0 && hasSignal(signals, SignalGrounding) {
+	// The grounding signal exists only when grounding ran at all — it is added
+	// above when Grounding > 0 or a Provenance entry was recorded, and
+	// assemble records one exactly when ground reported Applicable. So its
+	// presence already means "we looked", and a value of NotFound means "we
+	// looked and it is not there". That is the fabrication case, and this is
+	// the ceiling ADR-0013 puts on it.
+	//
+	// This used to additionally require len(f.Provenance) == 0, which made the
+	// whole condition a contradiction: the signal is only present when
+	// Grounding > 0 or Provenance is non-empty, and the cap demanded both be
+	// otherwise. The 0.35 ceiling could never bind, and the worked example in
+	// docs/explainability.md could not occur.
+	if f.Grounding == ground.NotFound && hasSignal(signals, SignalGrounding) {
 		cap(CapUngrounded, "capped:grounding", "the value is not in the source")
 	}
 	if len(f.Candidates) > 1 {
@@ -208,9 +225,12 @@ func (a *assembler) score(f schema.Field, vr validate.Result, gr ground.Result, 
 	if gr.Applicable {
 		ev.Grounding = gr.Grounding
 	}
-	if v, ok := validate.FormatSignal(vr); ok {
-		_ = v // carried through Validation; kept explicit so the source is visible
-	}
+	// An ambiguous date parsed, but under more than one reading. The scorer
+	// cannot see that from []RuleResult alone — the rule passed — so it is
+	// carried explicitly. Before this the ambiguity branch of
+	// validate.FormatSignal was computed and discarded, and docs/schema.md's
+	// promise that the signal "does not drop to zero" was not kept.
+	ev.Ambiguous = vr.Ambiguity != nil
 	s := a.cfg.scorer
 	if s == nil {
 		s = defaultScorer{}

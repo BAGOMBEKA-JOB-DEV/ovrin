@@ -9,6 +9,8 @@ import (
 	"image"
 	"image/png"
 	"io/fs"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/detect"
@@ -479,22 +481,8 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 	// another way. Acquisition is per page, not per document: one file can
 	// carry a digital contract and a scanned appendix, and taking one path for
 	// the whole of it loses whichever half it did not choose.
-	byPage := map[int]prompt.PageContent{}
-	var unread []int
-	for _, n := range unusable {
-		c, rd, err := acquirePage(ctx, cfg, doc, n)
-		if err != nil {
-			// The rest of the document is readable, so a page that cannot be
-			// filled is reported and the extraction continues. Refusing the
-			// whole document because one appendix page needs a renderer
-			// nobody configured would discard everything that did work.
-			cfg.emit(ctx, Event{Op: OpAcquire, Page: n, Duration: time.Since(start), Err: err})
-			unread = append(unread, n)
-			continue
-		}
-		byPage[n] = c
-		_ = rd
-	}
+	byPage, unread, used := acquirePages(ctx, cfg, doc, unusable, start)
+	addUsage(&meta.Usage, used)
 
 	kinds := make([]Reading, len(pages))
 	content := make([]prompt.PageContent, 0, len(pages))
@@ -623,6 +611,93 @@ func generateFrom(ctx context.Context, cfg *config, sch *schema.Schema, jsonSche
 	return obj, nil
 }
 
+// addUsage accumulates what a provider call cost.
+//
+// It exists because the cost of a reading has three call sites and used to
+// have none: every OCR adapter filled Recognition.Usage and the pipeline threw
+// it away, so Metadata.Usage.PageUnits was structurally always zero and the
+// otel metric and the evaluation harness's cost model both reported nothing.
+func addUsage(dst *Usage, src Usage) {
+	dst.InputTokens += src.InputTokens
+	dst.OutputTokens += src.OutputTokens
+	dst.PageUnits += src.PageUnits
+}
+
+// acquirePages reads every page the text layer could not serve, up to
+// cfg.concurrency of them at a time.
+//
+// Concurrency is the point. Each of these pages costs a rasterisation and an
+// OCR round-trip, and a scanned appendix bound onto a contract can be hundreds
+// of them; doing that serially makes a document take minutes it does not need
+// to. WithConcurrency has always documented a bound of min(4, GOMAXPROCS) —
+// this is where the bound is applied.
+//
+// It is bounded rather than unbounded because the work is not free to the other
+// side: every page in flight is a request at a provider that charges for it and
+// rate-limits it, and a renderer instance holding a page's worth of pixels.
+//
+// Order is not a property of the map, and the caller reassembles by page
+// number, so a page finishing early cannot displace one that started first.
+// Failures are collected rather than propagated: the rest of the document is
+// still readable, and refusing all of it because one appendix page needs a
+// renderer nobody configured would discard everything that did work.
+func acquirePages(ctx context.Context, cfg *config, doc Document, pages []int,
+	start time.Time,
+) (map[int]prompt.PageContent, []int, Usage) {
+	limit := cfg.concurrency
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > len(pages) {
+		limit = len(pages)
+	}
+
+	var (
+		mu     sync.Mutex
+		byPage = map[int]prompt.PageContent{}
+		unread []int
+		total  Usage
+		wg     sync.WaitGroup
+	)
+	sem := make(chan struct{}, limit)
+
+	for _, n := range pages {
+		// A cancelled context stops the pages that have not started. The ones
+		// already running observe it through their own calls.
+		if ctx.Err() != nil {
+			mu.Lock()
+			unread = append(unread, n)
+			mu.Unlock()
+			continue
+		}
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			c, _, used, err := acquirePage(ctx, cfg, doc, n)
+
+			mu.Lock()
+			defer mu.Unlock()
+			addUsage(&total, used)
+			if err != nil {
+				cfg.emit(ctx, Event{Op: OpAcquire, Page: n, Duration: time.Since(start), Err: err})
+				unread = append(unread, n)
+				return
+			}
+			byPage[n] = c
+		}(n)
+	}
+	wg.Wait()
+
+	// Sorted because the map iteration that produced them is not ordered, and
+	// a review reason naming pages in a different order on every run is a
+	// review reason nobody can diff.
+	sort.Ints(unread)
+	return byPage, unread, total
+}
+
 // acquirePage reads one page of a document the text layer could not serve.
 //
 // It is the per-page half of stage 2: rasterise, then OCR, then vision, taking
@@ -630,9 +705,9 @@ func generateFrom(ctx context.Context, cfg *config, sch *schema.Schema, jsonSche
 // document and for the same reason — OCR yields text, and text is what
 // grounding needs, so a value read this way can still be checked against the
 // document it came from.
-func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prompt.PageContent, Reading, error) {
+func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prompt.PageContent, Reading, Usage, error) {
 	if cfg.renderer == nil {
-		return prompt.PageContent{}, ReadingUnknown, &Error{
+		return prompt.PageContent{}, ReadingUnknown, Usage{}, &Error{
 			Op:   OpAcquire,
 			Page: page,
 			Kind: ErrNoProvider,
@@ -645,7 +720,7 @@ func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prom
 	img, err := cfg.renderer.Render(ctx, doc, page, renderDPI)
 	cfg.emit(ctx, Event{Op: OpRender, Page: page, Duration: time.Since(start), Err: err})
 	if err != nil {
-		return prompt.PageContent{}, ReadingUnknown, classify(OpRender, "", err)
+		return prompt.PageContent{}, ReadingUnknown, Usage{}, classify(OpRender, "", err)
 	}
 
 	b := img.Bounds()
@@ -663,7 +738,7 @@ func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prom
 		name := cfg.ocr.Name()
 		cfg.emit(ctx, Event{Op: OpOCR, Provider: name, Page: page, Duration: time.Since(oStart), Err: err})
 		if err != nil {
-			return prompt.PageContent{}, ReadingUnknown, classify(OpOCR, name, err)
+			return prompt.PageContent{}, ReadingUnknown, Usage{}, classify(OpOCR, name, err)
 		}
 		res := normalise.Normalise(normalise.Input{
 			Pages: []normalise.Page{normalisePage(page, p.Width, p.Height, rec)},
@@ -672,7 +747,8 @@ func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prom
 			Number:  page,
 			Reading: prompt.Reading(ReadingOCR),
 			Text:    res.Text,
-		}, ReadingOCR, nil
+			Tables:  promptTables(rec.Layout),
+		}, ReadingOCR, rec.Usage, nil
 	}
 
 	// No OCR provider: the page image goes to the model. That reading produces
@@ -680,7 +756,7 @@ func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prom
 	// it is the last choice rather than the first.
 	png, err := encodePNG(img)
 	if err != nil {
-		return prompt.PageContent{}, ReadingUnknown, &Error{
+		return prompt.PageContent{}, ReadingUnknown, Usage{}, &Error{
 			Op: OpAcquire, Page: page, Kind: ErrInternal,
 			Message: "the rendered page could not be encoded",
 		}
@@ -690,7 +766,7 @@ func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prom
 		Reading:   prompt.Reading(ReadingVision),
 		Image:     png,
 		MediaType: "image/png",
-	}, ReadingVision, nil
+	}, ReadingVision, Usage{}, nil
 }
 
 // renderDPI is the resolution pages are rasterised at when the text layer
@@ -732,11 +808,16 @@ func acquireByDocumentOCR(ctx context.Context, cfg *config, d DocumentOCR, doc D
 	meta.Providers[OpOCR] = name
 
 	pages := make([]normalise.Page, 0, len(recs))
+	// Collected alongside pages, not indexed by recs: a nil recognition is
+	// skipped, so recs[i] and pages[i] are not the same page.
+	tables := make([][]prompt.Table, 0, len(recs))
 	for i, rec := range recs {
 		if rec == nil {
 			continue
 		}
+		addUsage(&meta.Usage, rec.Usage)
 		pages = append(pages, normalisePage(i+1, 0, 0, rec))
+		tables = append(tables, promptTables(rec.Layout))
 	}
 
 	nStart := time.Now()
@@ -756,6 +837,7 @@ func acquireByDocumentOCR(ctx context.Context, cfg *config, d DocumentOCR, doc D
 			Number:  i + 1,
 			Reading: prompt.Reading(ReadingOCR),
 			Text:    pageText(res, i),
+			Tables:  tables[i],
 		})
 	}
 
@@ -769,6 +851,36 @@ func acquireByDocumentOCR(ctx context.Context, cfg *config, d DocumentOCR, doc D
 }
 
 // normalisePage converts one Recognition into the shape normalise reads.
+// promptTables converts one page's recognised tables into the shape the prompt
+// stage renders.
+//
+// A provider that reported no structure — or reported some and found none on
+// this page — contributes nothing, and the page's text is sent exactly as it
+// would have been. That is the pointer contract on [Recognition.Layout]
+// arriving where it matters: "nobody looked" and "looked, found nothing" are
+// different facts, and neither of them is a table.
+func promptTables(l *Layout) []prompt.Table {
+	if l == nil || len(l.Tables) == 0 {
+		return nil
+	}
+	out := make([]prompt.Table, 0, len(l.Tables))
+	for _, t := range l.Tables {
+		cells := make([]prompt.Cell, 0, len(t.Cells))
+		for _, c := range t.Cells {
+			cells = append(cells, prompt.Cell{
+				Row:        c.Row,
+				Column:     c.Column,
+				RowSpan:    c.RowSpan,
+				ColumnSpan: c.ColumnSpan,
+				Header:     c.Kind.Header(),
+				Text:       c.Text,
+			})
+		}
+		out = append(out, prompt.Table{Cells: cells})
+	}
+	return out
+}
+
 func normalisePage(number int, width, height float64, rec *Recognition) normalise.Page {
 	words := make([]normalise.Word, 0, len(rec.Words))
 	for _, w := range rec.Words {
@@ -809,6 +921,7 @@ func acquireByOCR(ctx context.Context, cfg *config, page *img.Page, doc Document
 		return nil, classify(OpOCR, name, err)
 	}
 	meta.Providers[OpOCR] = name
+	addUsage(&meta.Usage, rec.Usage)
 
 	words := make([]normalise.Word, 0, len(rec.Words))
 	for _, w := range rec.Words {

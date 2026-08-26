@@ -104,6 +104,16 @@ type FieldEvidence struct {
 	// found in the source.
 	Grounding float64
 
+	// Ambiguous reports whether a declared format parsed under more than one
+	// reading — 03/04/2026, which is a valid date in two conventions.
+	//
+	// It exists so the format signal can drop without going to zero. The text
+	// is a well-formed date; what is unknown is which date it is. Scoring that
+	// as a format failure would say the value is malformed, which is a
+	// different and wrong claim, and would rank it below values that are
+	// genuinely unparseable (docs/schema.md, "Ambiguous dates").
+	Ambiguous bool
+
 	// Provenance is where the value came from.
 	Provenance []Provenance
 

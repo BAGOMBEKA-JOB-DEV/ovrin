@@ -4,11 +4,15 @@
 > against a checkout; `go get` will not resolve until there is a release. See
 > the [README's status section](../README.md#status).
 >
-> Sections opening with a **v0.2** or **v0.3** note describe features that will
-> not be in the first release. Everything unmarked is v0.1 scope, and the
-> documentation checks in CI enforce that — an unmarked example may not use a
-> feature [`feature-matrix.md`](feature-matrix.md) marks ⛔ for the current
-> version ([ADR-0029](adr/0029-v01-scope-corrected.md)).
+> Sections opening with a **v0.2** or **v0.3** note say which milestone a
+> feature arrived in ([ADR-0029](adr/0029-v01-scope-corrected.md)). All of them
+> are implemented; the markers are history, not a warning.
+>
+> Nothing checks these markers automatically. `scripts/check-docs.py` verifies
+> links, citations, ADR hygiene, API references and the layout trees, but it
+> never opens [`feature-matrix.md`](feature-matrix.md) — so a marker that goes
+> stale here goes stale silently. This paragraph previously claimed CI enforced
+> it, which it never has.
 
 **Contents:** [Install](#install) · [First extraction](#first-extraction) ·
 [Reading the result](#reading-the-result) · [Scanned documents](#scanned-documents) ·

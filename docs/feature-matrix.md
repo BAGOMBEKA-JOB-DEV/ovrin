@@ -8,9 +8,10 @@ A matrix that lists only the green cells is exactly the thing rule
 this document exists to prevent: an adapter that quietly produces a worse
 answer than the caller believes they asked for.
 
-> **The OCR and model rows are measurements; anything still marked "not
-> started" is a specification.** Every ⚠️ cell is a behaviour the shared
-> contract suite asserts.
+> **The provider rows are measurements, not intentions.** Every adapter in
+> them exists and passes the shared contract suite, and every ⚠️ cell is a
+> behaviour that suite asserts. The `v1.0` column of the last table is the
+> exception: that one is a plan.
 
 **Legend**
 
@@ -72,8 +73,8 @@ skipped. Every cell below is a measurement.
 | Detected language | ✅ | ✅ | ⛔ Textract reports none, so `Recognition.Language` is always empty | ✅ most confident language whose spans overlap the page |
 | Page confidence | ✅ | ✅ | ⚠️ **derived** — Textract publishes none, so it is the mean of the LINE confidences (falling back to the words'), recorded in `Analysis.PageConfidenceDerived` | ⚠️ **derived** — same, the mean of the per-word confidences |
 | Handwriting | ✅ | ⚠️ poor; Tesseract is built for print | ✅ read; ⚠️ the PRINTED/HANDWRITING label itself is dropped | ✅ read; ⚠️ the handwriting style is dropped |
-| Table structure | ⚠️ detected by the provider, **discarded** by ovrin's `Recognition` | ⛔ | ⛔ not requested — `AnalyzeDocument` would return them and is deliberately unused | ⛔ not requested with `prebuilt-read`; ⚠️ with `WithModel("prebuilt-layout")` they are detected and discarded |
-| Key-value pairs | ⚠️ same | ⛔ | ⛔ same as tables | ⚠️ same as tables |
+| Table structure | ⚠️ detected by the provider, **discarded** by ovrin's `Recognition` | ⛔ | ⛔ not requested — `AnalyzeDocument` would return them and is deliberately unused | ⛔ not looked for with `prebuilt-read`, and `Recognition.Layout` is nil to say so; ✅ with `WithModel("prebuilt-layout")` or any other model, mapped onto `ovrin.Table` and rendered as a grid in the page content the model reads |
+| Key-value pairs | ⚠️ same | ⛔ | ⛔ same as tables | ✅ same models as tables, mapped onto `ovrin.Pair`; ⚠️ they cross the seam and reach `Recognition.Layout.Pairs`, and the prompt does not yet render them |
 | Per-symbol geometry, block types, per-block languages | ⚠️ **silently ignored** — reachable only through `Recognition.Raw` | ⛔ | ⚠️ block ids, the relationship graph and per-word `TextType` — same | ⚠️ paragraphs, selection marks, barcodes, formulas, styles, page rotation — same |
 | Page-unit billing | ⚠️ not reported; `Recognition` gained a `Usage` field in v0.2 and the adapter does not yet fill it | ⚠️ same | ✅ **one page unit per page** | ✅ **one page unit per page** |
 | Provider-side entity extraction | ⛔ deliberately unused — see below | ⛔ | ⛔ | ⛔ |
@@ -92,11 +93,22 @@ OCR adapter would be security-relevant code in the wrong place.
 on status alone would report a permission failure as a blank scan. Both the
 status code and the per-response gRPC code are classified.
 
-**The table and key-value rows are the honest ones.** Document AI, Textract and
-Azure all return richer structure than ovrin's `Recognition` carries, and
-reducing it to words and lines discards work you paid for
-([ADR-0009](adr/0009-ocr-seam.md)). It is reachable through `Recognition.Raw`
-by type assertion, which is not a real answer. Layout preservation is v0.3.
+**The table and key-value rows were the honest ones, and `azure` is now the
+exception.** `Recognition.Layout` carries tables and key-value pairs across the
+seam in a normalised form ([ADR-0009](adr/0009-ocr-seam.md)), and `ocr/azure`
+fills it: a detected table reaches `ovrin.Table` with its grid, spans and cell
+kinds intact, and `internal/prompt` renders it as a grid inside the untrusted
+content markers so the model sees a value under its column heading rather than
+a flattened run of words. `google` and `textract` still reduce structure to
+words and lines, and it is reachable there only through `Recognition.Raw` by
+type assertion, which is not a real answer.
+
+**The pointer on `Recognition.Layout` is what says who looked.** Nil is a
+provider that does not report structure; a non-nil empty `Layout` is one that
+looked and found none. `ocr/azure` returns nil for `prebuilt-read` — the
+default, which is OCR and nothing else — and a non-nil `Layout` for every other
+model. A caller deciding whether to read a page as a table or as prose needs
+that distinction, and a plain slice cannot express it.
 
 **Provider-side extraction is deliberately unused.** Document AI will return an
 invoice object directly. Ovrin uses these providers for OCR only, because
@@ -107,20 +119,28 @@ uninterpretable.
 
 ## Renderers
 
-| Capability | `render/pdfium` | `render/pdfiumcgo` |
-|---|---|---|
-| Rasterise a page | ✅ | ✅ |
-| Requires cgo [^cgo] | no — Wazero | yes |
-| Cross-compiles | yes | no |
-| Static binary | yes | no |
-| Speed | materially slower than native | native |
-| Binary size | embeds a large WASM blob | small |
-| DPI control | ✅ | ✅ |
-| Encrypted PDFs | ⛔ | ⛔ |
+One renderer exists.
+
+| Capability | `render/pdfium` |
+|---|---|
+| Rasterise a page | ✅ |
+| Requires cgo [^cgo] | no — PDFium compiled to WebAssembly, run under Wazero |
+| Cross-compiles | yes |
+| Static binary | yes |
+| Speed | materially slower than a native PDFium build |
+| Binary size | embeds a large WASM blob |
+| DPI control | ✅ per `Render` call |
+| Page-pixel ceiling | ✅ `WithMaxPagePixels`, checked against the declared media box **before** any bitmap is allocated ([ADR-0020](adr/0020-resource-limits.md)) |
+| Parallel rasterising | ✅ `WithInstances` — one WebAssembly module with its own linear memory per instance, defaulting to min(4, `GOMAXPROCS`) |
+| Encrypted PDFs | ⛔ `ErrEncrypted`; there is no password to give it |
 
 `render/pdfium` is the recommended default and the one the documentation points
-at ([ADR-0010](adr/0010-no-cgo-in-core.md)). The cgo variant exists for
-throughput-bound deployments that accept the toolchain.
+at ([ADR-0010](adr/0010-no-cgo-in-core.md)).
+
+A cgo-linked `render/pdfiumcgo`, trading cross-compilation for native speed,
+has been discussed and **does not exist**. It is not on the roadmap, has no
+ADR, and nothing in this repository imports it; if it is ever built it gets a
+column here, and until then it does not.
 
 ---
 
@@ -154,11 +174,12 @@ throughput-bound deployments that accept the toolchain.
 | `Explain` | ✅ | ✅ | ✅ | ✅ |
 | Two readings, cross-validation | ⛔ | ⛔ | ✅ | ✅ |
 | Provider fallback | ⛔ | ✅ | ✅ | ✅ |
-| Circuit breaking | ⛔ | ⛔ | ⛔ | ✅ |
+| Circuit breaking | ⛔ | ⛔ | ✅ | ✅ |
 | Hooks | ✅ | ✅ | ✅ | ✅ |
 | OpenTelemetry | ⛔ | ✅ | ✅ | ✅ |
 | Calibrated confidence | ⛔ | ⛔ | ⛔ | ✅ |
-| Batch, streaming large documents | ⛔ | ⛔ | ⛔ | ✅ |
+| Batch processing | ⛔ | ⛔ | ✅ | ✅ |
+| Streaming documents larger than memory | ⛔ | ⛔ | ⛔ | ⛔ deferred, [ADR-0031](adr/0031-documents-are-read-whole.md) |
 
 The ⚠️ in v0.1 provenance is the one to watch: page-level provenance is enough
 for grounding but not enough to highlight a region, so review interfaces built

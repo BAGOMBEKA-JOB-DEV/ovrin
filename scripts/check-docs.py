@@ -216,28 +216,93 @@ def check_api_references(docs):
 
 
 # --------------------------------------------------------------------------
-# 6. The two repository-layout trees agree
+# 6. The two repository-layout trees describe the repository that exists
 #
-# docs/architecture.md and AGENTS.md each carry one, hand-maintained.
+# docs/architecture.md and AGENTS.md each carry one, hand-maintained. This
+# check used to compare them against each other, which caught nothing worth
+# catching: both drifted the same way at the same time, agreed perfectly, and
+# stayed green while naming three packages that had never existed. The
+# filesystem is the only authority a layout tree can usefully be checked
+# against, so that is what it is checked against now.
+#
+# Test files are not required to appear in a tree — a tree is a map of the
+# implementation, and listing every _test.go would bury it.
 # --------------------------------------------------------------------------
-def check_layout_trees():
-    def go_files(path, heading_hint):
-        text = open(os.path.join(ROOT, path)).read()
-        blocks = re.findall(r"```text\n(.*?)```", text, re.S)
-        for b in blocks:
-            if heading_hint in b:
-                return {m for m in re.findall(r"\b([a-z_]+\.go)\b", b)}
-        return set()
+TREE_FILE = re.compile(r"^[A-Za-z0-9_.-]+\.go$")
+TREE_DIR = re.compile(r"^[a-z0-9_]+(?:/[a-z0-9_]+)*/$")
+TREE_LINE = re.compile(r"^((?:[\u2502 ]{4})*)(?:[\u251c\u2514]\u2500\u2500\s*)?(.*)$")
 
-    arch = go_files("docs/architecture.md", "ovrin.go")
-    agents = go_files("AGENTS.md", "ovrin.go")
-    if not arch or not agents:
-        fail("docs/architecture.md", "could not find a layout tree to compare")
+
+def parse_tree(path: str, hint: str):
+    """Return the repo-relative paths one fenced tree names.
+
+    Entries and their annotations share a line, so each line is read left to
+    right and stops at the first token that is not an entry: a line reading
+    `model.go   ocr.go   render.go      THE SEAMS` names three files and then
+    says something about them. Indentation gives the parent, so `pdf/` nested
+    under `internal/` resolves to `internal/pdf/` rather than to a top-level
+    directory that does not exist.
+    """
+    text = open(os.path.join(ROOT, path)).read()
+    for m in re.finditer(r"```text\n(.*?)```", text, re.S):
+        if hint not in m.group(1):
+            continue
+        first_line = text[: m.start(1)].count("\n") + 1
+        entries, stack = [], []
+        for i, line in enumerate(m.group(1).splitlines()):
+            if i == 0:
+                continue  # the module root itself, which is ROOT
+            lm = TREE_LINE.match(line)
+            depth = len(lm.group(1)) // 4
+            for tok in lm.group(2).split():
+                parent = stack[depth - 1] if 0 < depth <= len(stack) else ""
+                if TREE_DIR.match(tok):
+                    p = parent + tok
+                    entries.append((p, True, first_line + i))
+                    del stack[depth:]
+                    stack.append(p)
+                elif TREE_FILE.match(tok):
+                    entries.append((parent + tok, False, first_line + i))
+                else:
+                    break  # the annotation starts here
+        return entries
+    return None
+
+
+def check_layout_trees():
+    trees = {}
+    for path in ("docs/architecture.md", "AGENTS.md"):
+        entries = parse_tree(path, "ovrin.go")
+        if not entries:
+            fail(path, "could not find a repository-layout tree")
+            continue
+        trees[path] = entries
+    if len(trees) != 2:
         return
-    for name in sorted(arch - agents):
-        fail("AGENTS.md", f"layout tree omits {name}, which docs/architecture.md lists")
-    for name in sorted(agents - arch):
-        fail("docs/architecture.md", f"layout tree omits {name}, which AGENTS.md lists")
+
+    # What every tree must account for: the root package is the public API and
+    # internal/ is where the implementation lives, so a tree that omits either
+    # is a map with a missing country.
+    want = {f for f in os.listdir(ROOT)
+            if f.endswith(".go") and not f.endswith("_test.go")}
+    internal = os.path.join(ROOT, "internal")
+    want |= {f"internal/{d}/" for d in os.listdir(internal)
+             if os.path.isdir(os.path.join(internal, d))}
+
+    checked = 0
+    for path, entries in trees.items():
+        named = set()
+        for entry, is_dir, line in entries:
+            named.add(entry)
+            checked += 1
+            dest = os.path.join(ROOT, entry)
+            if not (os.path.isdir(dest) if is_dir else os.path.isfile(dest)):
+                fail(rel(os.path.join(ROOT, path)),
+                     f"layout tree names {entry}, which does not exist", line)
+        for missing in sorted(want - named):
+            fail(path, f"layout tree omits {missing}, which does exist")
+
+    notes.append(f"checked {checked} layout-tree entries against the filesystem")
 
 
 # --------------------------------------------------------------------------
@@ -283,7 +348,7 @@ def check_make_targets():
             declared.add(m.group(1))
 
     # Targets that exist as plumbing and need no entry of their own.
-    internal = {"tools-lint", "tools-vuln"}
+    internal = {"tools-lint", "tools-vuln", "tools-actions"}
 
     documented = set()
     for p in markdown_files():

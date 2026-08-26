@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // OCRChain returns an [OCR] that tries each provider in order.
@@ -36,8 +37,13 @@ func (c *ocrChain) Name() string { return "chain" }
 
 func (c *ocrChain) Recognise(ctx context.Context, page Page) (*Recognition, error) {
 	var attempts []error
-	for _, p := range c.providers {
+	for i, p := range c.providers {
+		start := time.Now()
 		rec, err := p.Recognise(ctx, page)
+		report(ctx, Event{
+			Op: OpOCR, Provider: p.Name(), Page: page.Number,
+			Attempt: i + 1, Duration: time.Since(start), Err: err,
+		})
 		if err == nil {
 			return rec, nil
 		}
@@ -63,7 +69,11 @@ type modelChain struct{ models []Model }
 func (c *modelChain) Generate(ctx context.Context, req ModelRequest) (*ModelResponse, error) {
 	var attempts []error
 	for i, m := range c.models {
+		start := time.Now()
 		resp, err := m.Generate(ctx, req)
+		report(ctx, Event{
+			Op: OpGenerate, Attempt: i + 1, Duration: time.Since(start), Err: err,
+		})
 		if err == nil {
 			return resp, nil
 		}
@@ -73,6 +83,20 @@ func (c *modelChain) Generate(ctx context.Context, req ModelRequest) (*ModelResp
 		}
 	}
 	return nil, exhausted("model", attempts)
+}
+
+// report emits an event through the hook on ctx, if there is one.
+//
+// It is what makes the promise above true. A chain that only surfaces failures
+// when every provider has failed hides the case that actually costs money: the
+// first provider failing on every request while the second quietly serves
+// them. That is a system running on its fallback for three weeks with nobody
+// aware, and it is the failure ADR-0018 accepted the decorator design in order
+// to make visible.
+func report(ctx context.Context, ev Event) {
+	if h := hookFrom(ctx); h != nil {
+		h(ctx, ev)
+	}
 }
 
 // advances reports whether a chain should try the next provider.

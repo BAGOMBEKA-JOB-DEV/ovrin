@@ -199,12 +199,22 @@ func WithAPIVersion(v string) Option {
 	}
 }
 
-// WithModel selects the model an analysis uses, for a caller who has a custom
-// one trained on their own documents.
+// WithModel selects the model an analysis uses, for a caller who wants table
+// and key-value detection or who has a custom model trained on their own
+// documents.
 //
-// Anything other than a read or layout model returns document fields as well as
-// text; ovrin uses only the words and lines, and the rest reaches a caller
-// through [ovrin.Recognition.Raw]. An empty string is ignored.
+// The default, [DefaultModel], is text and nothing else, and a recognition from
+// it leaves [ovrin.Recognition.Layout] nil: that model does not look for
+// structure. Every other model does, so a recognition from one carries a
+// non-nil Layout — empty when the page held no tables — with the tables and
+// key-value pairs mapped onto [ovrin.Table] and [ovrin.Pair]. "prebuilt-layout"
+// is the one to ask for when structure is what is wanted; it is OCR plus
+// structure and returns no document-shaped fields.
+//
+// A document-shaped model returns those fields as well, and ovrin does not use
+// them: mixing two extraction systems with different accuracy profiles makes a
+// confidence figure uninterpretable. They reach a caller through
+// [ovrin.Recognition.Raw]. An empty string is ignored.
 func WithModel(id string) Option {
 	return func(p *Provider) {
 		if id != "" {
@@ -330,13 +340,20 @@ func (p *Provider) Recognise(ctx context.Context, page ovrin.Page) (*ovrin.Recog
 	if err != nil {
 		return nil, err
 	}
+	structure := reportsStructure(p.ranModel(res))
 	if len(res.Pages) == 0 {
 		// Not an error. A blank page is a real thing a scanner produces, and
 		// the core decides what an empty reading means (rule §2.6).
-		return &ovrin.Recognition{
+		rec := &ovrin.Recognition{
 			Usage: ovrin.Usage{PageUnits: 1},
 			Raw:   &Analysis{JSON: raw, Page: page.Number},
-		}, nil
+		}
+		if structure {
+			// It looked and there was nothing to find, which is not the same
+			// as not looking. See [ovrin.Recognition.Layout].
+			rec.Layout = &ovrin.Layout{}
+		}
+		return rec, nil
 	}
 
 	first := &res.Pages[0]
@@ -348,7 +365,29 @@ func (p *Provider) Recognise(ctx context.Context, page ovrin.Page) (*ovrin.Recog
 	// The page number comes from the page that was recognised, not from the
 	// reply: a page sent on its own comes back numbered 1 whatever page of the
 	// caller's document it actually was.
-	return normalise(res, first, page.Number, sp, raw), nil
+	rec, err := normalise(res, first, page.Number, sp, raw, structure)
+	if err != nil {
+		// The cause names table and cell indexes and nothing a document could
+		// occupy, so it is safe to attach; the message itself stays fixed
+		// (rule §2.5, §7.5).
+		return nil, p.fail(ovrin.ErrBadResponse, page.Number,
+			"the structure the provider reported is not coherent").WithCause(err)
+	}
+	return rec, nil
+}
+
+// ranModel is the model an analysis was actually performed with.
+//
+// The reply's own modelId is preferred over the configured one, because that is
+// what the service says it ran; the configured model is the fallback for a
+// reply that omits it. Which model ran decides whether structure was looked
+// for at all, so guessing it from the response's contents would collapse
+// "found no tables" into "does not report tables".
+func (p *Provider) ranModel(res *analyzeResult) string {
+	if res != nil && res.ModelID != "" {
+		return res.ModelID
+	}
+	return p.model
 }
 
 // RecogniseDocument implements [ovrin.DocumentOCR], reading every page of a PDF
@@ -397,6 +436,7 @@ func (p *Provider) RecogniseDocument(ctx context.Context, doc ovrin.Document) ([
 		return res.Pages[order[a]].PageNumber < res.Pages[order[b]].PageNumber
 	})
 
+	structure := reportsStructure(p.ranModel(res))
 	out := make([]*ovrin.Recognition, 0, len(res.Pages))
 	for _, i := range order {
 		pg := &res.Pages[i]
@@ -414,7 +454,12 @@ func (p *Provider) RecogniseDocument(ctx context.Context, doc ovrin.Document) ([
 					"converted to points without knowing the page's size",
 					pg.Unit))
 		}
-		out = append(out, normalise(res, pg, number, sp, raw))
+		rec, err := normalise(res, pg, number, sp, raw, structure)
+		if err != nil {
+			return nil, p.fail(ovrin.ErrBadResponse, number,
+				"the structure the provider reported is not coherent").WithCause(err)
+		}
+		out = append(out, rec)
 	}
 	return out, nil
 }

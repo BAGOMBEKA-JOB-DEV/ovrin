@@ -89,6 +89,7 @@ Files are `NNNN-kebab-case-title.md`. Status is one of `Proposed`, `Accepted`,
 | [0028](0028-reading-and-readingmode.md) | `Reading` and `ReadingMode` are different types | Accepted |
 | [0029](0029-v01-scope-corrected.md) | The v0.1 scope, corrected | Accepted |
 | [0030](0030-an-internal-failure-sentinel.md) | A thirteenth sentinel, for ovrin's own failures | Accepted |
+| [0031](0031-documents-are-read-whole.md) | Documents are read whole; streaming is deferred | Accepted |
 
 ## Open questions
 
@@ -99,7 +100,7 @@ Decisions we know we will have to make, deliberately not made yet.
 | A `Validator` interface for user-defined rules | Evidence that the closed vocabulary in [ADR-0006](0006-tag-grammar.md) is too small |
 | Runtime schemas, for customer-defined forms | A user with the requirement |
 | Three-or-more readings with majority voting | Two readings measured on a real corpus ([ADR-0014](0014-cross-validation.md)) |
-| Circuit breaking in provider chains | v1.0 ([ADR-0018](0018-fallback-is-a-decorator.md)) |
+| Streaming documents that do not fit in memory | A calibrated corpus first ([ADR-0031](0031-documents-are-read-whole.md)) |
 | Encrypted PDF support | Demand ([ADR-0011](0011-pdf-text-extraction.md)) |
 | A trained confidence calibrator | A labelled corpus ([ADR-0023](0023-evaluation-corpus.md)) |
 | DOCX, XLSX and CSV sources | v0.3 ([`../roadmap.md`](../roadmap.md)) |

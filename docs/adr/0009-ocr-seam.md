@@ -92,7 +92,10 @@ provenance model are written once against one shape.
 Document AI's entity detection and Azure's key-value pairs are all richer than
 `Words` and `Lines`, and reducing them to words discards work the caller paid
 for. `Raw any` mitigates it for anyone willing to type-assert, which is not a
-real answer.
+real answer. Five modules is five sets of release mechanics for one maintainer.
+And the contract suite is a genuine barrier to contribution — "here is a
+provider adapter" now means "here is a provider adapter that passes twenty
+behavioural tests".
 
 > **Note, 2026-08-26.** This cost was partly paid back rather than accepted
 > permanently. `Recognition.Layout *Layout` now carries tables and key-value
@@ -108,10 +111,28 @@ real answer.
 > provider that reports structure ovrin cannot represent still loses it, and
 > the pointer exists only to distinguish "found none" from "did not look",
 > which is a subtlety every adapter author now has to get right. Entity
-> detection remains in `Raw`, so the paragraph above is still true of it. Five modules is five sets of release mechanics for one maintainer.
-And the contract suite is a genuine barrier to contribution — "here is a
-provider adapter" now means "here is a provider adapter that passes twenty
-behavioural tests".
+> detection remains in `Raw`, so the paragraph above is still true of it.
+>
+> **Follow-up.** The note above described a field, not a behaviour: nothing
+> set `Layout` and nothing read it, and a shape no adapter fills is a shape
+> that does not exist. Two things closed that. `ocr/azure` fills it — a
+> `prebuilt-layout` analysis, or any model other than the text-only
+> `prebuilt-read`, maps the response's tables and key-value pairs onto
+> `Layout`, and a `prebuilt-read` one leaves it nil, which is the pointer doing
+> the one job it was added for. And `internal/prompt` reads it, rendering a
+> page's tables as a grid inside the untrusted content markers, so structure
+> reaches the model instead of stopping at the seam. A table that crosses the
+> seam and is then ignored is no better than one that was discarded.
+>
+> `ocr/google` and `ocr/textract` still leave `Layout` nil and still lose their
+> structure into `Raw`. The claim that the providers' table models share an
+> intersection is about what is possible and not about what is shipped, and the
+> feature matrix is where the difference is recorded. The seam grew two methods
+> to make the mapping the same work for each of them: `Layout.Order` puts a
+> provider's output into ovrin's reading order, and `Layout.Check` reports the
+> structural mistakes an adapter can make — a cell outside its table, two cells
+> in one position, a confidence nobody divided by a hundred — as
+> `ErrBadResponse`, so an incoherent layout is refused rather than half-mapped.
 
 **Neutral.** Some providers do extraction as well as OCR — Document AI will
 return an invoice object directly. Ovrin uses them for OCR only. Their

@@ -3,8 +3,13 @@
 Ovrin has three seams. Anything implementing one is a first-class provider,
 whether it lives in this repository or yours.
 
-> **Not implemented yet.** This specifies the contract adapters will be written
-> and tested against.
+> **Six adapters ship in this repository**: `model/skyl` on the Model seam,
+> `ocr/tesseract`, `ocr/google`, `ocr/textract` and `ocr/azure` on the OCR
+> seam, and `render/pdfium` on the Renderer seam. All five Model and OCR
+> adapters pass the shared contract suite with no assertion skipped, so what
+> follows is a contract that has been kept rather than one that has been
+> proposed. There is no shared suite for the Renderer seam yet — one
+> implementation is not enough to know what to assert.
 
 **Contents:** [The rules](#the-rules-that-apply-to-every-adapter) ·
 [A Model adapter](#a-model-adapter) · [An OCR adapter](#an-ocr-adapter) ·
@@ -209,9 +214,12 @@ not be rasterised into an allocation larger than memory
 
 ## The contract suite
 
-Every adapter passes the shared suite in `internal/adaptertest`
+Every Model and OCR adapter passes the shared suite in `internal/adaptertest`
 (rule [§3.1](rules.md#3-testing)). A rule added there is enforced everywhere at
-once, and no adapter can regress behind another's tests.
+once, and no adapter can regress behind another's tests. The suite has a
+`Model` entry point and an `OCR` one; the Renderer seam has none, because
+`render/pdfium` is the only implementation and a suite written against one
+implementation asserts that implementation rather than the contract.
 
 ```go
 func TestProvider(t *testing.T) {

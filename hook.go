@@ -122,3 +122,30 @@ type ReviewReason struct {
 	// inferred" or "readings disagree".
 	Why string
 }
+
+// hookKey identifies the Hook carried on a context.
+//
+// The hook travels on the context rather than being handed to a provider at
+// construction because a decorator — a chain, a breaker — can be shared by two
+// Clients with different hooks, and can be running for both at once. Storing
+// it on the decorator would mean either the second Client silently overwrote
+// the first's hook, or a field mutated while another extraction read it.
+//
+// This is the narrow case a context value is for: a cross-cutting, per-call
+// concern that a shared component needs and that does not belong in the
+// provider interfaces every third-party adapter has to implement.
+type hookKey struct{}
+
+// withHook returns ctx carrying h, or ctx unchanged when there is no hook.
+func withHook(ctx context.Context, h Hook) context.Context {
+	if h == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, hookKey{}, h)
+}
+
+// hookFrom returns the Hook on ctx, or nil.
+func hookFrom(ctx context.Context) Hook {
+	h, _ := ctx.Value(hookKey{}).(Hook)
+	return h
+}

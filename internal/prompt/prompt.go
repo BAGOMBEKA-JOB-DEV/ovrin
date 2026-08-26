@@ -47,9 +47,10 @@
 //
 // [Request], [Content] and [Reading] mirror the root package's ModelRequest,
 // Content and Reading field for field, and the root converts between them at
-// the seam. They are declared here rather than imported because the root
-// package imports the pipeline, and a package the root imports cannot import
-// the root back.
+// the seam. [Table] and [Cell] mirror the part of its Table and Cell a
+// rendering needs and no more. They are declared here rather than imported
+// because the root package imports the pipeline, and a package the root imports
+// cannot import the root back.
 package prompt
 
 import (
@@ -86,7 +87,8 @@ var (
 	ErrNoContent = errors.New("no readable content")
 
 	// ErrAmbiguousContent means a page could not be represented faithfully:
-	// it carried both text and an image, or an image with no media type.
+	// it carried both text and an image, both a table and an image, or an
+	// image with no media type.
 	//
 	// One request is one reading, so a page carrying both leaves no honest
 	// choice — sending the text means ignoring the image, sending the image
@@ -203,6 +205,17 @@ type PageContent struct {
 	// into the request verbatim: this package never edits document content.
 	Text string
 
+	// Tables are the tables a provider recognised on this page, and are
+	// rendered as grids after Text, inside the same content markers.
+	//
+	// They are here because a table that crosses the OCR seam and is then not
+	// shown to the model is no better than one that was discarded: the words
+	// of a table reach the model either way, and only the grid says which
+	// column a value came from. A page with no tables, or from a provider that
+	// does not look for them, leaves this empty and its text is sent
+	// unchanged.
+	Tables []Table
+
 	// Image is the rasterised page, for a vision reading. A page sets either
 	// Text or Image, never both: a [Content] carries one or the other, and a
 	// page that sets both is refused with [ErrAmbiguousContent] rather than
@@ -253,14 +266,22 @@ func build(entropy io.Reader, s schema.Schema, jsonSchema []byte, pages []PageCo
 		}
 	}
 
-	id, err := boundary(entropy, pages)
+	// The bodies are built before the identifier is drawn, so that the
+	// identifier is checked against every byte the request will carry — a
+	// table cell's text included — rather than against the page prose alone.
+	bodies := make([]string, len(pages))
+	for i, p := range pages {
+		bodies[i] = pageBody(p)
+	}
+
+	id, err := boundary(entropy, bodies)
 	if err != nil {
 		return Request{}, err
 	}
 
 	content := make([]Content, 0, len(pages))
 	for i, p := range pages {
-		content = append(content, wrap(id, i, p))
+		content = append(content, wrap(id, i, p, bodies[i]))
 	}
 
 	temperature := DefaultTemperature
@@ -281,6 +302,13 @@ func check(index int, p PageContent) error {
 	}
 	if p.Text != "" {
 		return fmt.Errorf("%w: page %d carries both text and an image", ErrAmbiguousContent, number(index, p))
+	}
+	if len(p.Tables) > 0 {
+		// A table is text, and an image item carries none: sending the image
+		// would silently drop the structure, and rendering the table would
+		// mean not sending the page. Neither is honest, so the page is refused
+		// (docs/rules.md §6.1).
+		return fmt.Errorf("%w: page %d carries both a table and an image", ErrAmbiguousContent, number(index, p))
 	}
 	if p.MediaType == "" {
 		return fmt.Errorf("%w: page %d carries an image with no media type", ErrAmbiguousContent, number(index, p))
@@ -305,7 +333,10 @@ func number(index int, p PageContent) int {
 // prepended to an image is either ignored or corrupts it. The instruction
 // states that page images are document content too, so the labelling that
 // markers provide for text is provided for images by the instruction instead.
-func wrap(id string, index int, p PageContent) Content {
+// body is the page's document text with its tables already rendered, computed
+// once by [build] so that the boundary check and the request see the same
+// bytes.
+func wrap(id string, index int, p PageContent, body string) Content {
 	page := number(index, p)
 	if len(p.Image) > 0 {
 		return Content{
@@ -318,7 +349,7 @@ func wrap(id string, index int, p PageContent) Content {
 	return Content{
 		Reading: p.Reading,
 		Page:    page,
-		Text:    delimit(id, page, p.Reading, p.Text),
+		Text:    delimit(id, page, p.Reading, body),
 	}
 }
 

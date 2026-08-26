@@ -15,12 +15,12 @@ prefix. Entries below say which module they affect where it is not the core.
 
 ### Added
 
-- **The design.** This release contains no code. It establishes the
-  architecture, the public API specification, the pipeline, the schema grammar,
-  the confidence model and the threat model for a Go library that turns
-  documents into typed, validated data.
+- **The design, written before the code.** The architecture, the public API,
+  the pipeline, the schema grammar, the confidence model and the threat model
+  for a Go library that turns documents into typed, validated data — all
+  settled before the first line was implemented.
 
-  Twenty-five architecture decision records in [`docs/adr/`](docs/adr/) settle
+  Twenty-five architecture decision records in [`docs/adr/`](docs/adr/) settled
   the load-bearing questions, each with the alternatives that were rejected and
   the costs that were accepted. The ones that shape the most: the core has zero
   dependencies and no cgo, schemas are Go structs read by reflection,
@@ -168,11 +168,17 @@ prefix. Entries below say which module they affect where it is not the core.
   the rule, which is rule §8.5's cardinal sin. A second reply that is no better
   than the first is discarded. `Metadata.Retried` reports whether it happened.
 
-- **`Recognition.Layout`.** Tables and key-value pairs now cross the OCR seam
+- **`Recognition.Layout`.** Tables and key-value pairs cross the OCR seam
   in a normalised form — `Layout`, `Table`, `Cell`, `Pair`, `Region`, `Ref` and
   `CellKind` — instead of being discarded into `Raw`. The field is a pointer
   because an empty layout and no layout are different facts: a provider that
   looked and found no tables is not a provider that does not look.
+
+  `ocr/azure` fills it when configured with a layout model, and
+  `internal/prompt` renders the tables into the page the model reads — inside
+  the untrusted-content boundary, like everything else the document said. Key-
+  value pairs cross the seam and are not yet rendered; `ocr/google` and
+  `ocr/textract` still leave the field nil, which is what nil means.
 
   `Ref` is the loggable form of a claim about a table — "page 4, table 1, row
   3, column 2" — so a provenance entry or a review interface can say which
@@ -209,7 +215,63 @@ prefix. Entries below say which module they affect where it is not the core.
   dependency sits at a bare `v0.0.0` — and, as documented, never tags and never
   pushes.
 
-### Fixed
+- **Circuit breaking**, as a decorator. `BreakOCR` and `BreakModel` stop asking
+  a provider that has failed N times in a row, cool off, then admit exactly one
+  trial call — a provider that is still down should cost one request to
+  discover, not a thundering herd. They refuse with `ErrUnavailable`
+  specifically, because that is a condition a chain advances past, which is the
+  point of putting a breaker inside one. Failures a cooldown cannot fix — a bad
+  credential, a request no provider will accept — do not open it, or "your key
+  is wrong" turns into "the circuit breaker is open".
+
+- **`ExtractBatch`.** Many sources at once, bounded by `WithConcurrency`,
+  results in input order, one document's failure isolated to that document. A
+  loop that stops at the first bad scan in a thousand-file directory has thrown
+  away everything that worked.
+
+- **[ADR-0031](docs/adr/0031-documents-are-read-whole.md).** Documents are read
+  whole; streaming is deferred, with its reasons written down rather than left
+  as an unexplained open item.
+
+- **`WithConcurrency` did nothing at all.** It set a config field nothing read,
+  and the pipeline contained no goroutine, so a fifty-page scan made fifty
+  serial OCR round-trips while `docs/architecture.md` promised
+  `min(4, GOMAXPROCS)` at a time. Page acquisition is now genuinely concurrent,
+  bounded by the option, order-preserving and cancellable.
+
+- **The 0.35 ceiling on a fabricated value could never bind.** `CapUngrounded`
+  required both that grounding had run and that it had not, so the library's
+  headline safety property was unreachable and the worked example in
+  `docs/explainability.md` described arithmetic that could not occur. It now
+  produces exactly the documented 0.35.
+
+- **A data race on a shared `Client`.** `WithCrossField` appends to the one
+  slice in the configuration and `Extract` copies that configuration shallowly,
+  so with spare capacity two concurrent extractions each adding a per-call rule
+  wrote the same backing array slot — and each evaluated the other's rule.
+
+- **`Result.Confidence` could not be reproduced from `Result.Fields`.** It
+  averaged a snapshot taken during the field walk, but cross-field rules run
+  afterwards and rescore the fields they read; a document with a failing rule
+  reported 0.87 while its own fields averaged 0.78.
+
+- **Provider chains never reported through the hook**, although `chain.go` and
+  [ADR-0018](docs/adr/0018-fallback-is-a-decorator.md) both promised it. When a
+  later provider succeeded the earlier failures were discarded, so "a system
+  running on its worst provider for three weeks with nobody aware" — the exact
+  failure the promise was about — happened invisibly. `OCRChain` and
+  `ModelChain` also had no tests at all.
+
+- **OCR cost never reached `Metadata.Usage`.** Every adapter filled
+  `Recognition.Usage` and the pipeline discarded it, so `PageUnits` was
+  structurally always zero, the OpenTelemetry page-unit metric was flat, and
+  the evaluation harness's page-unit price could not produce a number.
+
+- **An ambiguous date scored as though it were not a date.**
+  `validate.FormatSignal` had the branch, the assembler called it and threw the
+  answer away, and the scorer could not see ambiguity through `[]RuleResult`
+  because the rule had passed. `FieldEvidence.Ambiguous` carries it, keeping
+  `docs/schema.md`'s promise that the signal does not drop to zero.
 
 - A source file that does not exist, or cannot be read, is now `ErrNoContent`
   rather than `ErrInternal`. `ErrInternal` means "file a bug against ovrin",

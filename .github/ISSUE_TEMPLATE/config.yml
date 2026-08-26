@@ -7,7 +7,7 @@ contact_links:
 
   - name: Documentation
     url: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/tree/main/docs
-    about: The design, the pipeline, the schema grammar and 25 decision records.
+    about: The design, the pipeline, the schema grammar and 31 decision records.
 
   - name: Why is it like this?
     url: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/tree/main/docs/adr

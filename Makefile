@@ -35,8 +35,11 @@ DOCKER  ?= docker
 
 # Pinned to what CI installs. A different golangci-lint reports different
 # findings, which makes `make lint` passing locally mean nothing.
-GOLANGCI_LINT_VERSION ?= v2.12.2
-GOVULNCHECK_VERSION   ?= v1.1.4
+GOLANGCI_LINT_VERSION ?= v2.13.1
+# v1.1.4 panics parsing Go 1.27 source — "unexpected expr:
+# *ast.KeyValueExpr" — so the version has to move with the toolchain.
+GOVULNCHECK_VERSION   ?= v1.7.0
+ACTIONLINT_VERSION    ?= v1.7.12
 
 # docs/rules.md §3.7. Never lower this to make a red build green.
 COVERAGE_FLOOR ?= 85
@@ -45,6 +48,11 @@ COVERAGE_FLOOR ?= 85
 # runs until it finds something or is stopped, which is not a thing to put in
 # a gate.
 FUZZTIME ?= 60s
+
+# How long Go may spend shrinking a newly interesting input before it goes back
+# to fuzzing. The default is unbounded in practice, and in internal/pdf that
+# swallowed almost the whole budget. See the fuzz target.
+FUZZMINIMIZETIME ?= 2s
 
 # Built binaries go here rather than beside their source. `go build ./...`
 # inside examples/receipt drops a 9MB binary in the tree, and that binary
@@ -106,7 +114,7 @@ hooks: ## Enable the commit-message sign-off hook
 	@echo "core.hooksPath = .githooks"
 
 .PHONY: tools
-tools: tools-lint tools-vuln ## Install golangci-lint and govulncheck at the versions CI pins
+tools: tools-lint tools-vuln tools-actions ## Install the linters and checkers CI uses, at CI's versions
 
 # GOTOOLCHAIN=auto is set for these two, and only these two.
 #
@@ -123,6 +131,15 @@ tools-lint:
 
 # Split out so CI's vuln job can install just this one and still take the
 # version from here. Two copies of a pinned version is two things to forget.
+# actionlint validates the workflow files themselves. Worth its own target
+# because a workflow file that GitHub rejects fails in zero seconds with
+# "this run likely failed because of a workflow file issue" and no line number
+# — which is how an invalid `if:` sat in ci.yml through every push, failing
+# every run, while the repository looked like it had CI.
+.PHONY: tools-actions
+tools-actions:
+	GOTOOLCHAIN=auto $(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
+
 .PHONY: tools-vuln
 tools-vuln:
 	GOTOOLCHAIN=auto $(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
@@ -184,19 +201,24 @@ bench: ## Run benchmarks (render/pdfium is the only package with any)
 
 .PHONY: fuzz
 fuzz: ## Fuzz every target for FUZZTIME each (default 60s)
-	@set -e; for t in \
-		internal/prompt:FuzzBuild \
-		internal/pdf:FuzzPDF \
-		internal/pdf:FuzzContent \
-		internal/pdf:FuzzCMap \
-		internal/img:FuzzDecode \
-		internal/compare:FuzzCompare \
-		internal/detect:FuzzDetect \
-		internal/office:FuzzOffice \
-		internal/normalise:FuzzNormalise; do \
-		pkg=$${t%%:*}; fn=$${t##*:}; \
-		printf '\033[1m==> %s %s\033[0m\n' "$$pkg" "$$fn"; \
-		$(GO) test -run='^$$' -fuzz="^$$fn$$" -fuzztime=$(FUZZTIME) "./$$pkg"; \
+	@# Targets are discovered, not listed, for the same reason modules are: a
+	@# hand-written list goes stale silently, and a fuzz target nobody runs is
+	@# worse than none because it looks like coverage.
+	@#
+	@# -fuzzminimizetime is capped. Go minimises every newly interesting input
+	@# before continuing, and in internal/pdf that minimisation is pathological
+	@# — measured at roughly a hundredfold fewer executions with the default,
+	@# so most of the budget went to shrinking inputs rather than finding them.
+	@# A crasher minimised for two seconds is still a reproducer.
+	@set -e; \
+	targets=$$(grep -rho '^func Fuzz[A-Za-z0-9_]*' --include='*_test.go' . \
+		| sed 's/^func //' | sort -u); \
+	for fn in $$targets; do \
+		for pkg in $$(grep -rl "^func $$fn(" --include='*_test.go' . | xargs -n1 dirname | sort -u); do \
+			printf '\033[1m==> %s %s\033[0m\n' "$$pkg" "$$fn"; \
+			$(GO) test -run='^$$' -fuzz="^$$fn$$" -fuzztime=$(FUZZTIME) \
+				-fuzzminimizetime=$(FUZZMINIMIZETIME) "$$pkg"; \
+		done; \
 	done
 
 .PHONY: test-integration
@@ -236,6 +258,14 @@ vet: ## Vet every build, tagged ones included
 
 # `golangci-lint: not found` from inside a for-loop is a confusing way to
 # learn you have not run `make setup`. Say the useful thing instead.
+.PHONY: actions
+actions: ## Validate the GitHub Actions workflow files
+	@command -v actionlint >/dev/null || { \
+		echo "actionlint is not installed — run 'make tools-actions' (or 'make setup')"; \
+		exit 1; }
+	@actionlint
+	@echo "workflows valid"
+
 .PHONY: lint
 lint: ## Run golangci-lint on every module
 	@command -v golangci-lint >/dev/null || { \
@@ -299,7 +329,7 @@ corpus: ## Regenerate the synthetic evaluation corpus in place
 ##@ Aggregates
 
 .PHONY: check
-check: fmt-check build vet test test-sandbox tidy-check lint vuln docs ## The gate to run before opening a pull request
+check: fmt-check build vet test test-sandbox tidy-check lint vuln docs actions ## The gate to run before opening a pull request
 	@printf '\n\033[32mcheck passed\033[0m\n'
 
 .PHONY: ci
@@ -313,35 +343,87 @@ ci: check test-cover cover-floor deps-check cross ## Everything CI runs
 # a check that was silently skipped. Tagging stays a thing a person does by
 # hand, having read this output.
 #
-#     make release-check VERSION=v0.2.0
+# VERSION is the tag exactly as it will be pushed. In a multi-module repository
+# that means it may carry the module's path prefix:
+#
+#     make release-check VERSION=v0.3.0              the core
+#     make release-check VERSION=model/skyl/v0.1.0   one module
+#
+# The module being released is derived from that prefix. MODULE= overrides the
+# derivation for the rare case where the tag and the directory disagree.
+#
+# The scoping is the point, not a convenience. Every non-root module has to
+# carry
+#
+#     replace github.com/BAGOMBEKA-JOB-DEV/ovrin => ../..
+#
+# until the core is tagged and the proxy has fetched it, because until then the
+# version its go.mod requires does not exist. A check that failed on *any*
+# module's replace therefore made the very first release impossible: the
+# replace cannot come out before the core tag, and the core tag could not be
+# cut while the replace was there. So the replace and placeholder checks read
+# the module under release, and the rest are reported as context rather than as
+# failures.
+#
+# The changelog is matched on the version number with the path prefix removed
+# and the leading v optional, because CHANGELOG.md follows Keep a Changelog and
+# writes `## [0.3.0] - 2026-08-26`. One changelog serves the whole repository,
+# so a module release looks for its own number in that same file.
 .PHONY: release-check
-release-check: ## Report whether this tree is fit to tag. VERSION=v0.2.0
-	@test -n "$(VERSION)" || { echo "usage: make release-check VERSION=v0.2.0"; exit 1; }
-	@fail=0; \
+release-check: ## Report whether this tree is fit to tag. VERSION=v0.3.0
+	@test -n "$(VERSION)" || { \
+		echo "usage: make release-check VERSION=v0.3.0"; \
+		echo "       make release-check VERSION=model/skyl/v0.1.0"; \
+		exit 1; }
+	@tag='$(VERSION)'; mod='$(MODULE)'; \
+	num="$${tag##*/}"; num="$${num#v}"; \
+	if [ -z "$$mod" ]; then \
+		case "$$tag" in */*) mod="$${tag%/*}";; *) mod=".";; esac; \
+	fi; \
+	mod="$${mod#./}"; mod="$${mod%/}"; [ -n "$$mod" ] || mod="."; \
+	if [ ! -f "$$mod/go.mod" ]; then \
+		echo "  FAIL  $$mod is not a module — no $$mod/go.mod"; \
+		echo; \
+		echo "not releasable. nothing was tagged and nothing was pushed."; \
+		exit 1; \
+	fi; \
+	echo "releasing $$mod as tag $$tag"; \
+	echo; \
+	fail=0; \
 	if [ -n "$$(git status --porcelain)" ]; then \
 		echo "  FAIL  the working tree is dirty"; fail=1; \
 	else echo "  ok    the working tree is clean"; fi; \
-	if git rev-parse -q --verify "refs/tags/$(VERSION)" >/dev/null; then \
-		echo "  FAIL  tag $(VERSION) already exists"; fail=1; \
-	else echo "  ok    tag $(VERSION) does not exist yet"; fi; \
-	if grep -q '^## \[\?$(VERSION)' CHANGELOG.md 2>/dev/null; then \
-		echo "  ok    CHANGELOG.md has a section for $(VERSION)"; \
-	else echo "  FAIL  CHANGELOG.md has no section for $(VERSION)"; fail=1; fi; \
+	if git rev-parse -q --verify "refs/tags/$$tag" >/dev/null; then \
+		echo "  FAIL  tag $$tag already exists"; fail=1; \
+	else echo "  ok    tag $$tag does not exist yet"; fi; \
+	re=$$(printf '%s' "$$num" | sed 's/\./\\./g'); \
+	if grep -qE "^## \[?v?$$re\]?" CHANGELOG.md 2>/dev/null; then \
+		echo "  ok    CHANGELOG.md has a section for $$num"; \
+	else \
+		echo "  FAIL  CHANGELOG.md has no '## [$$num]' section"; fail=1; \
+	fi; \
+	if grep -q '^replace ' "$$mod/go.mod"; then \
+		echo "  FAIL  $$mod/go.mod still has a replace directive"; fail=1; \
+	else echo "  ok    $$mod/go.mod has no replace directive"; fi; \
+	if grep -qE '^[[:space:]]+[^[:space:]]+ v0\.0\.0([[:space:]]|$$)' "$$mod/go.mod"; then \
+		echo "  FAIL  $$mod/go.mod pins a v0.0.0 placeholder"; fail=1; \
+	else echo "  ok    $$mod/go.mod pins no v0.0.0 placeholder"; fi; \
+	others=; \
 	for m in $(MODULES); do \
-		if grep -q '^replace ' "$$m/go.mod"; then \
-			echo "  FAIL  $$m/go.mod has a replace directive"; fail=1; \
-		fi; \
-		if grep -qE '^[[:space:]]+[^[:space:]]+ v0\.0\.0([[:space:]]|$$)' "$$m/go.mod"; then \
-			echo "  FAIL  $$m/go.mod pins a v0.0.0 placeholder"; fail=1; \
-		fi; \
+		m="$${m#./}"; \
+		[ "$$m" = "$$mod" ] && continue; \
+		if grep -q '^replace ' "$$m/go.mod"; then others="$$others $$m"; fi; \
 	done; \
-	if [ $$fail -eq 0 ]; then echo "  ok    no replace directives or placeholder versions"; fi; \
+	if [ -n "$$others" ]; then \
+		echo "  note  still carrying a replace, not released here:$$others"; \
+		echo "        expected until each is tagged in its turn — RELEASING.md"; \
+	fi; \
 	echo; \
 	if [ $$fail -ne 0 ]; then \
 		echo "not releasable. nothing was tagged and nothing was pushed."; exit 1; \
 	fi; \
 	echo "releasable. tag and push by hand:"; \
-	echo "    git tag -s $(VERSION) -m \"$(VERSION)\" && git push origin main $(VERSION)"
+	echo "    git tag -s $$tag -m \"$$tag\" && git push origin main $$tag"
 
 .PHONY: clean
 clean: ## Remove build and coverage output

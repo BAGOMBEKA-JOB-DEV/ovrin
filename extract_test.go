@@ -525,10 +525,17 @@ func TestHiddenTextInAPDFIsReported(t *testing.T) {
 		t.Error("NeedsReview = false on a document carrying hidden text")
 	}
 
+	// The reason names which detector fired, not merely that one did. A
+	// reviewer told "text in the background colour of page 1" knows where to
+	// look; one told "suspicious content" does not.
 	found := false
 	for _, r := range res.Reasons {
-		if contains(r.Why, "injection") {
+		if contains(r.Why, "background colour") {
 			found = true
+		}
+		// §7.5: the reason is log-shaped and carries no document text.
+		if contains(r.Why, "IGNORE") || contains(r.Why, "instructions") {
+			t.Errorf("a review reason quoted the hidden content: %q", r.Why)
 		}
 	}
 	if !found {

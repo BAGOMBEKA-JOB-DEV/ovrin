@@ -2,8 +2,9 @@
 
 Ordered by what blocks adoption, not by what is interesting to build.
 
-**Nothing below is implemented.** The repository contains the design. This
-document says what gets built and in what order.
+**Everything through v0.3 is implemented.** What remains is v1.0, and v1.0 is
+gated on evidence rather than on code. This document says what was built, in
+what order, and what is still owed.
 
 ---
 
@@ -11,15 +12,26 @@ document says what gets built and in what order.
 
 Work outside this repository that later phases depend on.
 
-- [ ] **Rename the GitHub repository** from `vellum` to `ovrin`. Until this is
-      done the module path does not resolve
-      ([ADR-0001](adr/0001-name-and-module-path.md)).
+- [x] **Rename the GitHub repository** from `vellum` to `ovrin`, done
+      2026-08-26. `github.com/BAGOMBEKA-JOB-DEV/ovrin` now resolves, so the
+      module path, both README badges and the advisory link in
+      [`SECURITY.md`](../SECURITY.md) reach a repository that exists
+      ([ADR-0001](adr/0001-name-and-module-path.md)). GitHub redirects the old
+      URL, but a clone made before the rename should update its remote:
+      `git remote set-url origin https://github.com/BAGOMBEKA-JOB-DEV/ovrin.git`
 - [x] ~~**Tag skyl v0.2.0**~~ — not needed. `Request.ResponseFormat` is already
       in skyl `v0.1.0`; the claim that it was not was an error, corrected in
       [ADR-0008](adr/0008-skyl-is-an-adapter.md). `model/skyl` requires the real
       tag.
-- [ ] **Seed the evaluation corpus** with five redistributable documents per
-      category. Everything after this is unmeasurable without it
+- [ ] **Seed the evaluation corpus with real documents.** Twenty-five are
+      committed — five each for invoices, receipts, forms, statements and
+      identity, across clean-digital, good-scan, poor-scan, photograph and
+      multi-column difficulties — but every one is `source: synthetic`,
+      generated deterministically by `eval/corpusgen`. Synthetic documents
+      exercise the pipeline and catch regressions; they cannot tell us how
+      ovrin behaves on the documents people actually have, which is what
+      [ADR-0024](adr/0024-versioning-and-stability.md)'s first condition asks
+      for. Public forms and donated documents are what is still wanted
       ([ADR-0023](adr/0023-evaluation-corpus.md)).
 
 ---
@@ -102,11 +114,15 @@ cross-validation (v0.3), provider fallback chains (v0.2), local rasterising
       but not highlighted on a page
 - [x] Multi-page documents with per-page acquisition paths — a digital
       contract with a scanned appendix reads each page by its own path
-- [x] Layout preservation — `Recognition.Layout` carries tables and key-value
-      regions across the OCR seam; see the note on
-      [ADR-0009](adr/0009-ocr-seam.md), which this reverses a cost of.
-      Columns are **not** preserved: the two cloud text-detection APIs report
-      no column structure, and a two-column page can still interleave
+- [x] Layout preservation — `ocr/azure` fills `Recognition.Layout` when asked
+      for a layout model, and `internal/prompt` renders the tables into the page
+      the model reads, inside the untrusted-content boundary like every other
+      thing the document said. See the follow-up on
+      [ADR-0009](adr/0009-ocr-seam.md), whose accepted cost this reverses.
+      Two things it does not do: key-value pairs cross the seam and are not yet
+      rendered, and columns are **not** preserved — the cloud text-detection
+      APIs report no column structure, so a two-column page can still
+      interleave
 - [x] Two readings and cross-validation
       ([ADR-0014](adr/0014-cross-validation.md))
 - [x] Extraction retry on schema-invalid output — once, and only for a reply
@@ -122,21 +138,41 @@ cross-validation (v0.3), provider fallback chains (v0.2), local rasterising
 
 ## v1.0 — Trustworthy
 
-v1.0 is gated on evidence, not on features. All four conditions from
-[ADR-0024](adr/0024-versioning-and-stability.md) must hold.
+v1.0 is gated on evidence, not on features. The gate is the four conditions
+from [ADR-0024](adr/0024-versioning-and-stability.md), and all four must hold.
 
+**The gate**
+
+- [ ] **A corpus of real documents in every category, with committed reports
+      across at least two provider generations.** The twenty-five committed
+      documents are synthetic, so this condition is not met by them; see
+      Phase 0.
 - [ ] **Calibrated confidence** — published expected calibration error and
       accuracy within confidence bands. Until this lands, confidence is
       documented as a ranking signal and not a probability
       ([ADR-0013](adr/0013-multi-signal-confidence.md)).
-- [ ] Evaluation corpus populated across every category and difficulty level,
-      with committed reports across at least two provider generations
-- [ ] At least one production deployment that is not the maintainer's, with its
-      feedback incorporated
-- [ ] Batch processing, and streaming for documents that do not fit in memory
-- [ ] Circuit breaking in provider chains
+- [ ] **At least one production deployment that is not the maintainer's**, with
+      its feedback incorporated.
+- [ ] **No known API change we would want to make.**
+
+**Work items wanted before v1.0**
+
+These are features, not conditions: shipping them does not open the gate, and
+the gate does not wait on them.
+
+- [x] **Batch processing** — `ExtractBatch` runs many sources at once, bounded
+      by `WithConcurrency`, in input order, with one document's failure
+      isolated to that document
+- [ ] **Streaming for documents that do not fit in memory** — deferred with its
+      reasons written down in
+      [ADR-0031](adr/0031-documents-are-read-whole.md). It is not a gate
+      condition, and it re-architects the three places where the resource
+      limits are enforced, which is not work to do before there is a corpus
+      that could tell you whether behaviour moved
+- [x] **Circuit breaking in provider chains** — `BreakOCR` and `BreakModel`, as
+      decorators rather than logic inside the chain
+      ([ADR-0018](adr/0018-fallback-is-a-decorator.md))
 - [ ] Benchmarks published, per stage
-- [ ] No known API change we would want to make
 
 ---
 
@@ -191,5 +227,6 @@ correctness ([ADR-0013](adr/0013-multi-signal-confidence.md)).
 
 Accuracy improvements are not scheduled here, because a schedule implies they
 can be planned. They come from the evaluation corpus telling us where we are
-wrong. Until the corpus exists, any promise about accuracy would be a guess
-dressed as a plan.
+wrong. The corpus that exists is synthetic, so it can catch a regression but
+cannot yet say how accurate ovrin is on real documents; until it can, any
+promise about accuracy would be a guess dressed as a plan.

@@ -6,9 +6,10 @@
 # The format follows Go's own api/go1.N.txt. Parameter names are dropped —
 # a rename should not churn this file; `go mirror` fences check those.
 #
-# Until the code exists this file is hand-authored and is the SPECIFICATION:
-# the generator is red until the source matches it. See ADR-0024 for what
-# happens to this file at v1.0.
+# Never edit it by hand: an entry the generator would not produce is a claim
+# about the public surface that the public surface does not make. Regenerate
+# after an intended API change and read the diff. See ADR-0024 for what happens
+# to this file at v1.0.
 #
 pkg ovrin, const CapDisagreement float64
 pkg ovrin, const CapRuleFailed float64
@@ -20,6 +21,8 @@ pkg ovrin, const CellRowHeader CellKind
 pkg ovrin, const CellUnknown CellKind
 pkg ovrin, const DateOrderUnknown DateOrder
 pkg ovrin, const DayFirst DateOrder
+pkg ovrin, const DefaultBreakerCooldown int
+pkg ovrin, const DefaultBreakerFailures int
 pkg ovrin, const DefaultMaxDecompressedBytes int64
 pkg ovrin, const DefaultMaxDepth int
 pkg ovrin, const DefaultMaxObjects int
@@ -77,8 +80,11 @@ pkg ovrin, const WeightOCR float64
 pkg ovrin, const WeightSchema float64
 pkg ovrin, const YearFirst DateOrder
 pkg ovrin, func Before(string, string) CrossFieldRule
+pkg ovrin, func BreakModel(Model, ...BreakerOption) Model
+pkg ovrin, func BreakOCR(OCR, ...BreakerOption) OCR
 pkg ovrin, func Bytes([]byte) Source
 pkg ovrin, func CrossFieldFunc(string, func(CrossFields) CrossFieldResult) CrossFieldRule
+pkg ovrin, func ExtractBatch[T any](context.Context, *Client, []Source, ...Option) []BatchResult[T]
 pkg ovrin, func Extract[T any](context.Context, *Client, Source, ...Option) (*Result[T], error)
 pkg ovrin, func File(string) Source
 pkg ovrin, func ModelChain(...Model) Model
@@ -87,6 +93,8 @@ pkg ovrin, func OCRChain(...OCR) OCR
 pkg ovrin, func Reader(io.Reader) Source
 pkg ovrin, func Sum(string, Tolerance, ...string) CrossFieldRule
 pkg ovrin, func SumItems(string, string, Tolerance, ...string) CrossFieldRule
+pkg ovrin, func WithBreakerCooldown(time.Duration) BreakerOption
+pkg ovrin, func WithBreakerFailures(int) BreakerOption
 pkg ovrin, func WithConcurrency(int) Option
 pkg ovrin, func WithCrossField(...CrossFieldRule) Option
 pkg ovrin, func WithDateOrder(DateOrder) Option
@@ -112,7 +120,11 @@ pkg ovrin, method (*Error) Error() string
 pkg ovrin, method (*Error) Unwrap() []error
 pkg ovrin, method (*Error) WithCause(error) *Error
 pkg ovrin, method (*Explanation) String() string
+pkg ovrin, method (*Layout) Order()
 pkg ovrin, method (*Result[T]) Explain(string) (*Explanation, bool)
+pkg ovrin, method (Cell) Columns() int
+pkg ovrin, method (Cell) Covers(int, int) bool
+pkg ovrin, method (Cell) Rows() int
 pkg ovrin, method (CellKind) Header() bool
 pkg ovrin, method (CellKind) String() string
 pkg ovrin, method (CrossFields) Count(string) int
@@ -121,9 +133,18 @@ pkg ovrin, method (CrossFields) Text(string) (string, bool)
 pkg ovrin, method (CrossFields) Time(string) (time.Time, bool)
 pkg ovrin, method (Kind) String() string
 pkg ovrin, method (Layout) At(Ref) (Cell, bool)
+pkg ovrin, method (Layout) Check() error
 pkg ovrin, method (Layout) Ref(int, Cell) Ref
 pkg ovrin, method (Op) String() string
+pkg ovrin, method (Pair) Box() Rect
 pkg ovrin, method (Reading) String() string
+pkg ovrin, method (Ref) String() string
+pkg ovrin, method (Table) At(int, int) (Cell, bool)
+pkg ovrin, type BatchResult[T any] struct
+pkg ovrin, type BatchResult[T any] struct, Err error
+pkg ovrin, type BatchResult[T any] struct, Index int
+pkg ovrin, type BatchResult[T any] struct, Result *Result[T]
+pkg ovrin, type BreakerOption func(*breaker)
 pkg ovrin, type Candidate struct
 pkg ovrin, type Candidate struct, Reading Reading
 pkg ovrin, type Candidate struct, Source Provenance
@@ -198,6 +219,7 @@ pkg ovrin, type Explanation struct, Value any
 pkg ovrin, type FieldEvidence struct
 pkg ovrin, type FieldEvidence struct, Agreement *float64
 pkg ovrin, type FieldEvidence struct, AgreementNote string
+pkg ovrin, type FieldEvidence struct, Ambiguous bool
 pkg ovrin, type FieldEvidence struct, Candidates []Candidate
 pkg ovrin, type FieldEvidence struct, Field string
 pkg ovrin, type FieldEvidence struct, Found bool

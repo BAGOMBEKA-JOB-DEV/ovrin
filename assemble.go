@@ -1,9 +1,12 @@
 package ovrin
 
 import (
+	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/compare"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/ground"
@@ -20,7 +23,7 @@ import (
 // makes a field the model omitted representable: it produces a FieldResult with
 // Found false rather than simply not appearing. A reply-driven walk would
 // silently lose exactly the information the caller most needs.
-func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
+func assemble[T any](ctx context.Context, out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 	var data T
 	dst := reflect.ValueOf(&data).Elem()
 
@@ -39,16 +42,26 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 	)
 
 	a := &assembler{
-		out:     out,
-		cfg:     cfg,
-		v:       v,
-		fields:  make(map[string]FieldResult),
-		values:  make(validate.Fields),
-		alt:     alt,
-		suspect: pagesWithFindings(out.findings),
+		out:      out,
+		cfg:      cfg,
+		v:        v,
+		fields:   make(map[string]FieldResult),
+		values:   make(validate.Fields),
+		alt:      alt,
+		suspect:  pagesWithFindings(out.findings),
+		findings: out.findings,
 	}
+	// Validation and grounding both happen inside the walk, interleaved per
+	// field, so there is no separate pass to time. They are reported as two
+	// stages anyway because that is the vocabulary errors already use and the
+	// span names otel already maps — an Op that can appear on an Error and
+	// never on an Event makes a trace and a failure describe the same
+	// extraction in two different languages.
+	vStart := time.Now()
 	a.walk(sch.Fields, out.object, dst, "")
 	a.crossField()
+	cfg.emit(ctx, Event{Op: OpValidate, Fields: len(a.fields), Duration: time.Since(vStart)})
+	cfg.emit(ctx, Event{Op: OpGround, Fields: a.grounded, Duration: time.Since(vStart)})
 
 	// A page nothing could read is reported on the result, not only through a
 	// hook a caller may not be watching. Its fields are simply absent, and
@@ -88,9 +101,20 @@ type assembler struct {
 	reasons []ReviewReason
 	suspect map[int]bool
 
-	valid    bool
-	required []float64 // confidences of required fields
-	optional []float64
+	valid bool
+	// Keys, not confidences.
+	//
+	// These used to hold the confidence of each field as walk computed it,
+	// and aggregate averaged those numbers. But crossField runs afterwards and
+	// rescores fields in a.fields, so the averaged snapshot was taken before
+	// the last thing that changes a score. Result.Confidence and the
+	// per-field Confidence values then disagreed whenever a cross-field rule
+	// applied. Holding keys and reading a.fields at the end means there is one
+	// source of truth and no ordering to get wrong.
+	findings []normalise.Finding
+	grounded int      // fields grounding was able to look for
+	required []string // keys of required fields
+	optional []string
 }
 
 // walk processes one level of the schema against one level of the reply.
@@ -191,6 +215,7 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 	}
 	if gr.Applicable {
 		ev.Provenance = []Provenance{provenanceOf(gr, a.out.reading, a.out.provider)}
+		a.grounded++
 	}
 
 	// Two readings of one document. When they differ, at least one is wrong
@@ -256,9 +281,9 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 	}
 	a.recordReasons(f, key, vr, gr, conf, cands)
 	if required(f) {
-		a.required = append(a.required, conf)
+		a.required = append(a.required, key)
 	} else {
-		a.optional = append(a.optional, conf)
+		a.optional = append(a.optional, key)
 	}
 }
 
@@ -319,6 +344,31 @@ func (a *assembler) suspicious() bool {
 	return len(a.suspect) > 0
 }
 
+// suspicionReasons returns one content-free sentence per distinct finding.
+//
+// Deduplicated and sorted: the same finding is recorded per page, and a field
+// on a ten-page document should not produce ten identical review reasons in
+// whatever order a map iterated.
+func (a *assembler) suspicionReasons() []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(a.findings))
+	for _, f := range a.findings {
+		why := f.Why()
+		if seen[why] {
+			continue
+		}
+		seen[why] = true
+		out = append(out, why)
+	}
+	if len(out) == 0 {
+		// A page was flagged but carried no describable finding. Say
+		// something rather than nothing.
+		return []string{"the source carried content that looked like an injection attempt"}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result, gr ground.Result, conf float64, cands []Candidate) {
 	add := func(why string) { a.reasons = append(a.reasons, ReviewReason{Field: key, Why: why}) }
 
@@ -335,7 +385,18 @@ func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result
 		add("the date is ambiguous and ovrin will not guess which reading is meant")
 	}
 	if a.suspicious() {
-		add("the source carried content that looked like an injection attempt")
+		// Say which kind, not just that there was one.
+		//
+		// Finding.Why() is a fixed phrase per kind plus a codepoint, a page
+		// and a count — no document text, by construction — and the five
+		// kinds want five different responses from a reviewer. "Text in the
+		// background colour of page 3" sends someone to look at page 3;
+		// "instruction-shaped language in document metadata" sends them
+		// somewhere else entirely. Collapsing both into one sentence made the
+		// detectors' whole vocabulary invisible to the person acting on it.
+		for _, why := range a.suspicionReasons() {
+			add(why)
+		}
 	}
 	if conf < a.cfg.reviewThreshold && vr.Found {
 		add("confidence is below the review threshold")
@@ -347,12 +408,12 @@ func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result
 func (a *assembler) aggregate() float64 {
 	const optionalWeight = 0.5
 	var sum, weight float64
-	for _, c := range a.required {
-		sum += c
+	for _, k := range a.required {
+		sum += a.fields[k].Confidence
 		weight++
 	}
-	for _, c := range a.optional {
-		sum += c * optionalWeight
+	for _, k := range a.optional {
+		sum += a.fields[k].Confidence * optionalWeight
 		weight += optionalWeight
 	}
 	if weight == 0 {
