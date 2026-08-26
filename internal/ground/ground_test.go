@@ -44,7 +44,7 @@ func TestGroundNumbers(t *testing.T) {
 		text  string
 	}{
 		{"an unformatted integer matches its own bytes", 25000, Verbatim, "25000"},
-		{"a grouped figure matches by value", 24000 + 1000 - 0, Verbatim, "25000"},
+		{"a grouped figure matches by value", 25000, Verbatim, "25000"},
 		{"a European decimal matches by value", 1234.50, Normalised, "1 234,50"},
 		{"an apostrophe group separator matches by value", 1250, Normalised, "1'250"},
 		{"a float matches an integer literal", 25000.0, Verbatim, "25000"},
@@ -53,9 +53,9 @@ func TestGroundNumbers(t *testing.T) {
 		{"a trailing group does not match on its own", 0, NotFound, ""},
 		{"a digit run inside a longer number does not match", 5000, NotFound, ""},
 		{"a number that is simply absent is not found", 987654, NotFound, ""},
-		{"a number separated by a space is still one number", 1234.5, Normalised, "1 234,50"},
-		{"a small number beside another is found", 4, Normalised, "4"},
-		{"a number equal to a page number is found in the body", 3, Normalised, "3"},
+		{"a space-grouped figure is one number", 1234.5, Normalised, "1 234,50"},
+		{"a small number beside another is found", 4, Verbatim, "4"},
+		{"a number equal to a page number is found in the body", 3, Verbatim, "3"},
 	}
 	for _, c := range cases {
 		c := c
@@ -122,7 +122,7 @@ func TestGroundCurrency(t *testing.T) {
 		text  string
 	}{
 		{"amount and code both present", "1234.56 EUR", Normalised, "EUR 1.234,56"},
-		{"code after the amount", "900 GBP", Normalised, "900 GBP"},
+		{"code after the amount is verbatim in the text", "900 GBP", Verbatim, "900 GBP"},
 		{"a symbol stands for its code", "250.00 USD", Normalised, "$250.00"},
 		{"the same amount in another currency is not a match", "1234.56 GBP", NotFound, ""},
 		{"a currency that is absent is not a match", "250.00 JPY", NotFound, ""},
@@ -162,12 +162,13 @@ func TestGroundDates(t *testing.T) {
 		{"prose with the month named", []string{"Issued 3 March 2026"}, march3, DateOrderUnknown, Normalised, "3 March 2026"},
 		{"prose with an ordinal suffix", []string{"Issued 3rd March 2026"}, march3, DateOrderUnknown, Normalised, "3rd March 2026"},
 		{"prose in american order", []string{"Issued March 3, 2026"}, march3, DateOrderUnknown, Normalised, "March 3, 2026"},
-		{"prose written out in full", []string{"Issued the third of March 2026"}, march3, DateOrderUnknown, Normalised, "third of March 2026"},
-		{"an ordinal above twenty", []string{"Issued the twenty-first of March 2026"}, time.Date(2026, 3, 21, 0, 0, 0, 0, time.UTC), DateOrderUnknown, Normalised, "twenty-first of March 2026"},
+		{"prose written out in full", []string{"Issued the third of March 2026"}, march3, DateOrderUnknown, Normalised, "the third of March 2026"},
+		{"an ordinal above twenty", []string{"Issued the twenty-first of March 2026"}, time.Date(2026, 3, 21, 0, 0, 0, 0, time.UTC), DateOrderUnknown, Normalised, "the twenty-first of March 2026"},
 		{"abbreviated month", []string{"Issued 3 Mar 2026"}, march3, DateOrderUnknown, Normalised, "3 Mar 2026"},
-		{"an ambiguous date matches either reading when none is set", []string{"Issued 04/03/2026"}, march3, DateOrderUnknown, Normalised, "04/03/2026"},
-		{"an ambiguous date does not match the other reading when one is set", []string{"Issued 04/03/2026"}, march3, DayFirst, NotFound, ""},
-		{"a month-first reading is honoured", []string{"Issued 03/04/2026"}, march3, MonthFirst, Normalised, "03/04/2026"},
+		{"an ambiguous date matches its day-first reading when none is set", []string{"Issued 04/03/2026"}, time.Date(2026, 3, 4, 0, 0, 0, 0, time.UTC), DateOrderUnknown, Normalised, "04/03/2026"},
+		{"an ambiguous date matches its month-first reading when none is set", []string{"Issued 04/03/2026"}, time.Date(2026, 4, 3, 0, 0, 0, 0, time.UTC), DateOrderUnknown, Normalised, "04/03/2026"},
+		{"an ambiguous date does not match the other reading when one is set", []string{"Issued 04/03/2026"}, time.Date(2026, 4, 3, 0, 0, 0, 0, time.UTC), DayFirst, NotFound, ""},
+		{"a month-first reading is honoured", []string{"Issued 03/04/2026"}, time.Date(2026, 3, 4, 0, 0, 0, 0, time.UTC), MonthFirst, Normalised, "03/04/2026"},
 		{"a different day is not a match", []string{"Issued 2026-03-04"}, march3, DateOrderUnknown, NotFound, ""},
 		{"an impossible day is not read as a date", []string{"Ref 31/02/2026 only"}, time.Date(2026, 3, 3, 0, 0, 0, 0, time.UTC), DateOrderUnknown, NotFound, ""},
 		{"a date the document does not contain is not found", []string{"No dates here"}, march3, DateOrderUnknown, NotFound, ""},
@@ -191,6 +192,10 @@ func TestGroundDates(t *testing.T) {
 
 func TestGroundStrings(t *testing.T) {
 	t.Parallel()
+	// The haystack is the normalised text, which is what Span indexes, so
+	// "verbatim" is measured against it: a whitespace run the normaliser
+	// collapsed and a ligature it expanded are verbatim in the stream a
+	// model was shown. A normalised match is what differs from that.
 	doc := page("Vendor ACME  Ltd of Ofﬁce Park", "Contact Ms Bäcker", "Beneficiary Smithson")
 
 	cases := []struct {
@@ -200,9 +205,10 @@ func TestGroundStrings(t *testing.T) {
 		text  string
 	}{
 		{"the same bytes are verbatim", "ACME", Verbatim, "ACME"},
+		{"a whitespace run the normaliser collapsed is verbatim", "ACME Ltd", Verbatim, "ACME Ltd"},
 		{"a different case is a normalised match", "acme ltd", Normalised, "ACME Ltd"},
-		{"a collapsed whitespace run still matches", "ACME Ltd", Normalised, "ACME Ltd"},
-		{"a ligature in the source matches its expansion", "Office Park", Normalised, "Ofﬁce Park"},
+		{"a fullwidth value matches its ascii form", "\uff21\uff23\uff2d\uff25", Normalised, "ACME"},
+		{"a ligature the normaliser expanded is verbatim", "Office Park", Verbatim, "Office Park"},
 		{"a decomposed accent matches its composed form", "Bäcker", Normalised, "Bäcker"},
 		{"an expanded name is a different string", "Acme Limited", NotFound, ""},
 		{"a value inside a longer word does not match", "Smith", NotFound, ""},
@@ -519,32 +525,124 @@ func TestFoldMapsBackToTheSource(t *testing.T) {
 func TestBounded(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name    string
-		text    string
-		start   int
-		length  int
-		numeric bool
-		want    bool
+		name   string
+		text   string
+		start  int
+		length int
+		want   bool
 	}{
-		{"a whole word", "Acme Ltd", 0, 4, false, true},
-		{"a prefix of a word", "Smithson", 0, 5, false, false},
-		{"a suffix of a word", "Smithson", 5, 3, false, false},
-		{"the whole text", "Acme", 0, 4, false, true},
-		{"a word beside punctuation", "(Acme)", 1, 4, false, true},
-		{"a group of a formatted number", "25,000", 0, 2, true, false},
-		{"the last group of a formatted number", "25,000", 3, 3, true, false},
-		{"a whole formatted number", "at 25,000 now", 3, 6, true, true},
-		{"a number beside a space and a letter", "25 USD", 0, 2, true, true},
-		{"a number in a spaced group", "25 000", 0, 2, true, false},
-		{"a number beside a single digit", "3 4", 0, 1, true, true},
+		{"a whole word", "Acme Ltd", 0, 4, true},
+		{"a prefix of a word", "Smithson", 0, 5, false},
+		{"a suffix of a word", "Smithson", 5, 3, false},
+		{"the whole text", "Acme", 0, 4, true},
+		{"a word beside punctuation", "(Acme)", 1, 4, true},
+		{"a word beside a space", "an Acme item", 3, 4, true},
+		{"an empty span", "Acme", 2, 0, false},
+		{"a span past the end", "Acme", 2, 9, false},
 	}
 	for _, c := range cases {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			sp := normalise.Span{Start: c.start, End: c.start + c.length}
-			if got := bounded(c.text, sp, c.numeric); got != c.want {
-				t.Errorf("bounded(%q, %q) = %v, want %v", c.text, c.text[sp.Start:sp.End], got, c.want)
+			if got := bounded(c.text, sp); got != c.want {
+				t.Errorf("bounded(%q, %v) = %v, want %v", c.text, sp, got, c.want)
+			}
+		})
+	}
+}
+
+// TestScanNumbers pins where one number stops and the next begins, which is
+// the single definition every numeric comparison in this package uses.
+func TestScanNumbers(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		text  string
+		spans []string
+	}{
+		{"a bare integer", "Total 42 items", []string{"42"}},
+		{"a grouped figure", "Total 25,000 due", []string{"25,000"}},
+		{"a decimal", "Rate 1,250.00 each", []string{"1,250.00"}},
+		{"a space-grouped figure is one number", "Total 25 000 due", []string{"25 000"}},
+		{"a long space-grouped figure is one number", "Total 1 234 567 due", []string{"1 234 567"}},
+		{"two three-digit figures are read both ways", "Row 100 200 end", []string{"100 200", "100", "200"}},
+		{"single digits beside each other are separate", "page 3 4", []string{"3", "4"}},
+		{"a digit run after a letter is an identifier", "form A4 only", nil},
+		{"a digit run inside a word is an identifier", "COVID19 report", nil},
+		{"a trailing full stop ends the number", "Total 42. Next", []string{"42"}},
+		{"a negative figure keeps its sign", "Balance -42 owed", []string{"-42"}},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			got := scanNumbers(c.text)
+			if len(got) != len(c.spans) {
+				t.Fatalf("scanNumbers(%q) found %d tokens %v, want %d %v",
+					c.text, len(got), spanTexts(c.text, got), len(c.spans), c.spans)
+			}
+			for i, want := range c.spans {
+				if lit := c.text[got[i].span.Start:got[i].span.End]; lit != want {
+					t.Errorf("token %d = %q, want %q", i, lit, want)
+				}
+				if len(got[i].vals) == 0 {
+					t.Errorf("token %d has no value", i)
+				}
+			}
+		})
+	}
+}
+
+func spanTexts(s string, toks []numTok) []string {
+	out := make([]string, len(toks))
+	for i, t := range toks {
+		out[i] = s[t.span.Start:t.span.End]
+	}
+	return out
+}
+
+// TestGroundedSpanSlicesToTheMatch asserts across every kind that the span a
+// Result carries actually addresses the text that matched. A span reported at
+// the wrong offset highlights the wrong part of the page, which is worse for
+// a reviewer than no highlight at all.
+func TestGroundedSpanSlicesToTheMatch(t *testing.T) {
+	t.Parallel()
+	doc := page("Vendor Acme Ltd", "Total 1,250.00 USD", "Issued 3 March 2026", "Approved yes")
+
+	cases := []struct {
+		name  string
+		value any
+		kind  Kind
+	}{
+		{"string", "Acme", KindString},
+		{"folded string", "acme ltd", KindString},
+		{"number", 1250.0, KindNumber},
+		{"currency", "1250.00 USD", KindCurrency},
+		{"date", time.Date(2026, 3, 3, 0, 0, 0, 0, time.UTC), KindDate},
+		{"bool", true, KindBool},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			r := Ground(doc, c.value, c.kind)
+			if r.Span == nil {
+				t.Fatalf("no span; grounding = %v", r.Grounding)
+			}
+			if r.Span.Start < 0 || r.Span.End > len(doc.Text) || r.Span.Start >= r.Span.End {
+				t.Fatalf("span %v is outside the %d bytes of text", *r.Span, len(doc.Text))
+			}
+			if doc.Inserted(*r.Span) {
+				t.Errorf("span %v reaches into text ovrin inserted", *r.Span)
+			}
+			if r.Page != 1 {
+				t.Errorf("Page = %d, want 1", r.Page)
+			}
+			switch r.Grounding {
+			case Verbatim, Normalised:
+			default:
+				t.Errorf("a match reported grounding %v", r.Grounding)
 			}
 		})
 	}

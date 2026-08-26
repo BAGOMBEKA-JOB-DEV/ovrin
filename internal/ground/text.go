@@ -22,7 +22,9 @@ func groundable(lit string) bool { return strings.TrimSpace(lit) != "" }
 // own form is never demoted to a normalised match by a type-aware search that
 // also happens to find it.
 func findLiteral(doc *normalise.Result, lit string, kind Kind) (normalise.Span, bool) {
-	numeric := kind == KindNumber || kind == KindCurrency || kind == KindDate
+	if kind == KindNumber {
+		return findNumberLiteral(doc, lit)
+	}
 	from := 0
 	for {
 		i := strings.Index(doc.Text[from:], lit)
@@ -30,7 +32,7 @@ func findLiteral(doc *normalise.Result, lit string, kind Kind) (normalise.Span, 
 			return normalise.Span{}, false
 		}
 		sp := normalise.Span{Start: from + i, End: from + i + len(lit)}
-		if bounded(doc.Text, sp, numeric) && acceptable(doc, sp) {
+		if bounded(doc.Text, sp) && acceptable(doc, sp) {
 			return sp, true
 		}
 		from = sp.Start + 1
@@ -58,7 +60,7 @@ func findFolded(doc *normalise.Result, lit string, kind Kind) (normalise.Span, b
 				break
 			}
 			start, end := from+i, from+i+len(needle)
-			if bounded(hay, normalise.Span{Start: start, End: end}, false) {
+			if bounded(hay, normalise.Span{Start: start, End: end}) {
 				sp := normalise.Span{Start: index[start], End: index[end]}
 				if acceptable(doc, sp) {
 					return sp, true
@@ -105,12 +107,10 @@ func acceptable(doc *normalise.Result, sp normalise.Span) bool {
 // that cannot tell those apart is worse than none: it reports 1.0 for a value
 // the document does not contain.
 //
-// numeric widens the boundary to include the separators inside a formatted
-// figure, because "25" sits at an ordinary word boundary inside "25,000" —
-// a comma is not a letter — and grounding twenty-five against a document that
-// says twenty-five thousand is the worst false positive this package could
-// produce.
-func bounded(s string, sp normalise.Span, numeric bool) bool {
+// Numbers do not use this. A comma is not a letter, so 25 sits at an ordinary
+// word boundary inside 25,000; numeric matching goes through [scanNumbers]
+// instead, so that what counts as one number is decided in one place.
+func bounded(s string, sp normalise.Span) bool {
 	if sp.Start < 0 || sp.End > len(s) || sp.Start >= sp.End {
 		return false
 	}
@@ -126,45 +126,6 @@ func bounded(s string, sp normalise.Span, numeric bool) bool {
 		after, _ := utf8.DecodeRuneInString(s[sp.End:])
 		if wordRune(last) && wordRune(after) {
 			return false
-		}
-	}
-	return !numeric || numericEdges(s, sp)
-}
-
-// numericEdges reports whether a match is a whole numeric literal rather than
-// part of a longer one.
-//
-// It applies the continuation rules [scanNumbers] uses, so that the two agree
-// on where a number starts and stops. Getting this wrong in either direction
-// is expensive: too loose and twenty-five grounds against a page saying
-// twenty-five thousand, too tight and "3" fails to ground against "page 3 4".
-func numericEdges(s string, sp normalise.Span) bool {
-	if sp.Start > 0 {
-		r, size := utf8.DecodeLastRuneInString(s[:sp.Start])
-		prev := sp.Start - size
-		switch {
-		case r == '.' || r == ',':
-			if prev > 0 && isDigit(s[prev-1]) {
-				return false
-			}
-		case strings.ContainsRune(groupSeparators, r):
-			if prev > 0 && isDigit(s[prev-1]) && groupOf3(s, sp.Start) {
-				return false
-			}
-		}
-	}
-	if sp.End < len(s) {
-		r, size := utf8.DecodeRuneInString(s[sp.End:])
-		next := sp.End + size
-		switch {
-		case r == '.' || r == ',':
-			if next < len(s) && isDigit(s[next]) {
-				return false
-			}
-		case strings.ContainsRune(groupSeparators, r):
-			if groupOf3(s, next) {
-				return false
-			}
 		}
 	}
 	return true

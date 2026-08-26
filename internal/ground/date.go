@@ -52,7 +52,7 @@ func (a date) valid() bool {
 // findDate searches for a written date equal to any of want.
 func findDate(doc *normalise.Result, want []date, order DateOrder) (normalise.Span, bool) {
 	for _, h := range scanDates(doc.Text, order) {
-		if !acceptable(doc, h.span) || !bounded(doc.Text, h.span, true) {
+		if !acceptable(doc, h.span) || !bounded(doc.Text, h.span) {
 			continue
 		}
 		for _, a := range h.dates {

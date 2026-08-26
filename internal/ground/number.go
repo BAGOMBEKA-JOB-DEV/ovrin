@@ -35,13 +35,31 @@ type numTok struct {
 // document, and a check that fires constantly is a check nobody reads.
 func findNumber(doc *normalise.Result, want float64) (normalise.Span, bool) {
 	for _, t := range scanNumbers(doc.Text) {
-		if !acceptable(doc, t.span) || !bounded(doc.Text, t.span, true) {
+		if !acceptable(doc, t.span) {
 			continue
 		}
 		for _, v := range t.vals {
 			if nearlyEqual(v, want) {
 				return t.span, true
 			}
+		}
+	}
+	return normalise.Span{}, false
+}
+
+// findNumberLiteral searches for a numeric token written exactly as the value
+// was.
+//
+// Verbatim matching for a number goes through the token scanner rather than
+// through a plain string search, so that "a number" means one thing in this
+// package. A string search finds 25 inside 25,000 — a comma is not a letter,
+// so an ordinary word boundary is satisfied — and grounding twenty-five
+// against a page that says twenty-five thousand is the worst false positive
+// available here.
+func findNumberLiteral(doc *normalise.Result, lit string) (normalise.Span, bool) {
+	for _, t := range scanNumbers(doc.Text) {
+		if acceptable(doc, t.span) && doc.Text[t.span.Start:t.span.End] == lit {
+			return t.span, true
 		}
 	}
 	return normalise.Span{}, false
@@ -75,6 +93,14 @@ func scanNumbers(s string) []numTok {
 			continue
 		}
 		start := i
+		// A digit run that a letter runs into is part of an identifier, not a
+		// figure: the 4 of "A4" and the 19 of "COVID19" are not quantities.
+		if before, size := utf8.DecodeLastRuneInString(s[:i]); size > 0 && (unicode.IsLetter(before) || before == '_') {
+			for i < len(s) && isDigit(s[i]) {
+				i++
+			}
+			continue
+		}
 		if start > 0 && (s[start-1] == '-' || s[start-1] == '+') {
 			if start == 1 || !wordRune(rune(s[start-2])) {
 				start--
@@ -101,7 +127,56 @@ func scanNumbers(s string) []numTok {
 		if vals := numberValues(s[start:end]); len(vals) > 0 {
 			out = append(out, numTok{span: normalise.Span{Start: start, End: end}, vals: vals})
 		}
+		out = append(out, spaceParts(s, start, end)...)
 		i = end
+	}
+	return out
+}
+
+// spaceParts returns the pieces of a space-separated literal as tokens in
+// their own right, when reading it as one grouped number is not the only
+// sensible reading.
+//
+// "25 000" is one number: a leading group of one or two digits followed by
+// groups of three is how half of Europe writes twenty-five thousand, and
+// nothing else is written that way. "100 200" is not: it is equally a table
+// row with two figures in it, and normalisation has by then collapsed the
+// column gap that would have told them apart. Both readings are offered, and
+// a match against either grounds the value — the alternative is a signal that
+// reads zero on every table in the corpus.
+func spaceParts(s string, start, end int) []numTok {
+	lit := s[start:end]
+	if !strings.ContainsAny(lit, groupSeparators) {
+		return nil
+	}
+	lead := 0
+	for lead < len(lit) && isDigit(lit[lead]) {
+		lead++
+	}
+	if lead <= 2 {
+		return nil
+	}
+	var out []numTok
+	at := 0
+	for at < len(lit) {
+		if strings.ContainsRune(groupSeparators, rune(lit[at])) {
+			at++
+			continue
+		}
+		j := at
+		for j < len(lit) && !strings.ContainsRune(groupSeparators, rune(lit[j])) {
+			j++
+		}
+		if vals := numberValues(lit[at:j]); len(vals) > 0 {
+			out = append(out, numTok{
+				span: normalise.Span{Start: start + at, End: start + j},
+				vals: vals,
+			})
+		}
+		at = j
+	}
+	if len(out) < 2 {
+		return nil
 	}
 	return out
 }
@@ -281,7 +356,7 @@ func findCurrency(doc *normalise.Result, lit string) (normalise.Span, bool) {
 		return findNumber(doc, amount)
 	}
 	for _, t := range scanNumbers(doc.Text) {
-		if !acceptable(doc, t.span) || !bounded(doc.Text, t.span, true) {
+		if !acceptable(doc, t.span) {
 			continue
 		}
 		matched := false
