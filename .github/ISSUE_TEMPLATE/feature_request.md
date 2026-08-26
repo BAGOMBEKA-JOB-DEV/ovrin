@@ -20,13 +20,13 @@ change to ovrin. Please check first, and say what you found.
 
 Ovrin's ADRs all name their downsides, and requests are held to the same
 standard. What would this make worse? Consider: a new dependency in the core is
-disallowed outright ([§4.1](../docs/rules.md#4-dependencies)); a new exported
+disallowed outright ([§4.1](https://github.com/BAGOMBEKA-JOB-DEV/ovrin/blob/main/docs/rules.md#4-dependencies)); a new exported
 type is permanent; a new option is one more thing to document and get wrong.
 
 ## Have you checked the roadmap and the ADRs?
 
-- [ ] Not already listed in [`docs/roadmap.md`](../docs/roadmap.md), including
+- [ ] Not already listed in [`docs/roadmap.md`](https://github.com/BAGOMBEKA-JOB-DEV/ovrin/blob/main/docs/roadmap.md), including
       the "Deferred, deliberately" section
-- [ ] Not already decided against in [`docs/adr/`](../docs/adr/README.md) —
+- [ ] Not already decided against in [`docs/adr/`](https://github.com/BAGOMBEKA-JOB-DEV/ovrin/blob/main/docs/adr/README.md) —
       and if it is, I have said which ADR and why I think it should be
       superseded
