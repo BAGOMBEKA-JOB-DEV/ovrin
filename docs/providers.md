@@ -43,6 +43,25 @@ environment in a library is how a program talks to the wrong account.
 [§5.4](rules.md#5-concurrency-and-resources)). Say so in the doc comment.
 Tested, including for goroutine leaks.
 
+**7. Never send a credential to a host the caller did not configure** (rule
+[§7.4](rules.md#7-untrusted-input)). Several asynchronous APIs answer a submission
+with the URL to collect the result from — Azure Document Intelligence's
+`Operation-Location`, and the `Location` header of any 202. That URL is
+provider-supplied, and polling it carries your credential to whatever it names.
+A compromised or malicious reply can therefore exfiltrate the key to any host
+on the internet, and the request will look entirely ordinary.
+
+Check the scheme and host against the configured endpoint before following it,
+and refuse with `ErrBadResponse` when they differ. `ocr/azure` does this in
+`pollURL`, and its test stands up a second server that fails the test if it is
+ever reached. Note that `http.Client` follows redirects by default, so the same
+applies to a 302 pointing off-host — the check has to be on the URL you are
+about to use, not only on the one you were handed.
+
+This is [§7.4](rules.md#7-untrusted-input)'s "nothing a document references is ever
+fetched" applied one level up: nothing a *provider* names is fetched either,
+unless the caller configured it.
+
 Shape:
 
 ```go
@@ -126,6 +145,7 @@ type Recognition struct {
     Lines      []Line
     Confidence float64
     Language   string
+    Layout     *Layout   // tables and pairs; nil when the provider does not look
     Raw        any
     Usage      Usage
 }

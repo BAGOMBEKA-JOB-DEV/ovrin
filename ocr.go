@@ -50,6 +50,16 @@ type Recognition struct {
 	// report one.
 	Language string
 
+	// Layout is the structure the provider recognised on this page — its
+	// tables and key-value pairs — or nil for a provider that does not report
+	// structure.
+	//
+	// The pointer is load-bearing. An empty Layout is a provider that looked
+	// and found nothing; nil is a provider that does not look. A caller
+	// deciding whether to treat the page as a table or as prose needs to tell
+	// those apart, and a plain slice cannot say it.
+	Layout *Layout
+
 	// Raw is the provider's own response, for callers willing to type-assert.
 	// Providers that detect tables or key-value pairs expose them here; ovrin
 	// itself uses words and lines.

@@ -8,9 +8,9 @@ A matrix that lists only the green cells is exactly the thing rule
 this document exists to prevent: an adapter that quietly produces a worse
 answer than the caller believes they asked for.
 
-> **Nothing here is implemented yet.** This is the specification the adapters
-> will be built and tested against. Every ⚠️ cell is a behaviour the shared
-> contract suite must assert.
+> **The OCR and model rows are measurements; anything still marked "not
+> started" is a specification.** Every ⚠️ cell is a behaviour the shared
+> contract suite asserts.
 
 **Legend**
 
@@ -55,29 +55,31 @@ silently relaxed constraint.
 
 ## OCR adapters
 
-Only `google` and `tesseract` exist. `textract` and `azure` are v0.2 items not
-yet started, and are listed so the shape of the seam is visible — every cell in
-their columns is a plan, not a measurement.
+All four exist and all four pass the shared contract suite with no assertion
+skipped. Every cell below is a measurement.
 
 | Capability | `google` | `tesseract` | `textract` | `azure` |
 |---|---|---|---|---|
-| **Built** | ✅ | ✅ | ⛔ not started | ⛔ not started |
-| Word text | ✅ | ✅ | — | — |
-| Word bounding boxes | ✅ | ✅ | — | — |
-| Per-word confidence | ✅ | ✅ | — | — |
-| Reading order | ⚠️ blocks and paragraphs are sorted; lines within a block keep the provider's order, so a two-column page is approximate | ✅ | — | — |
-| Accepts a PDF whole (no local renderer) | ✅ **PDF only** — TIFF and GIF are refused with `ErrUnsupported`, because Vision reports their geometry in pixels with no resolution and it could not be converted to points | ⛔ | — | — |
-| Pages per document call | ⚠️ **5 maximum.** Google's synchronous endpoint truncates silently beyond that, so a document with more is refused rather than half-read | — | — | — |
-| Language hints | ✅ | ✅ | — | — |
-| Handwriting | ✅ | ⚠️ poor; Tesseract is built for print | — | — |
-| Table structure | ⚠️ detected by the provider, **discarded** by ovrin's `Recognition` | ⛔ | — | — |
-| Key-value pairs | ⚠️ same | ⛔ | — | — |
-| Per-symbol geometry, block types, per-block languages | ⚠️ **silently ignored** — reachable only through `Recognition.Raw` | ⛔ | — | — |
-| Page-unit billing | ⚠️ not reported; `Recognition` gained a `Usage` field in v0.2 and the adapter does not yet fill it | ⚠️ same | — | — |
-| Provider-side entity extraction | ⛔ deliberately unused — see below | ⛔ | — | — |
+| **Built** | ✅ | ✅ | ✅ | ✅ |
+| Word text | ✅ | ✅ | ✅ | ✅ |
+| Word bounding boxes | ✅ | ✅ | ✅ converted from the 0..1 fractions Textract reports | ✅ converted from polygons, in inches or pixels per the `unit` the response declares |
+| Per-word confidence | ✅ | ✅ | ✅ reported 0–100, divided | ✅ already 0..1 |
+| Reading order | ⚠️ blocks and paragraphs are sorted; lines within a block keep the provider's order, so a two-column page is approximate | ✅ | ⚠️ lines sorted top-to-bottom in bands, left-to-right within a band; **a two-column page whose columns share a band interleaves**, because text detection reports no block or column structure to sort instead | ⚠️ same; the service's `paragraphs` would be the route to fixing it and are not read |
+| Accepts a PDF whole (no local renderer) | ✅ **PDF only** — TIFF and GIF are refused with `ErrUnsupported`, because Vision reports their geometry in pixels with no resolution and it could not be converted to points | ⛔ | ✅ **PDF and TIFF**, but see the two rows below | ✅ **PDF only** — TIFF, BMP, HEIF and Office/HTML refused with `ErrUnsupported`, for the same geometry reason as `google` |
+| Pages per document call | ⚠️ **5 maximum.** Google's synchronous endpoint truncates silently beyond that, so a document with more is refused rather than half-read | — | ⚠️ **1 inline.** More needs the S3-backed async operation via `WithDocumentLocation`; refused with `ErrUnsupported` naming both limits rather than half-read | ✅ every page returned; a short read is refused |
+| Page size for a document | — | — | ⛔ **must be declared** via `WithPageSize` — Textract states geometry as a fraction of a page whose size it never reports, and a Letter default would be silently 4% wrong on every A4 document | — the service states each page's size and unit |
+| Language hints | ✅ | ✅ | ⛔ the API accepts none | ✅ `WithLocale` |
+| Detected language | ✅ | ✅ | ⛔ Textract reports none, so `Recognition.Language` is always empty | ✅ most confident language whose spans overlap the page |
+| Page confidence | ✅ | ✅ | ⚠️ **derived** — Textract publishes none, so it is the mean of the LINE confidences (falling back to the words'), recorded in `Analysis.PageConfidenceDerived` | ⚠️ **derived** — same, the mean of the per-word confidences |
+| Handwriting | ✅ | ⚠️ poor; Tesseract is built for print | ✅ read; ⚠️ the PRINTED/HANDWRITING label itself is dropped | ✅ read; ⚠️ the handwriting style is dropped |
+| Table structure | ⚠️ detected by the provider, **discarded** by ovrin's `Recognition` | ⛔ | ⛔ not requested — `AnalyzeDocument` would return them and is deliberately unused | ⛔ not requested with `prebuilt-read`; ⚠️ with `WithModel("prebuilt-layout")` they are detected and discarded |
+| Key-value pairs | ⚠️ same | ⛔ | ⛔ same as tables | ⚠️ same as tables |
+| Per-symbol geometry, block types, per-block languages | ⚠️ **silently ignored** — reachable only through `Recognition.Raw` | ⛔ | ⚠️ block ids, the relationship graph and per-word `TextType` — same | ⚠️ paragraphs, selection marks, barcodes, formulas, styles, page rotation — same |
+| Page-unit billing | ⚠️ not reported; `Recognition` gained a `Usage` field in v0.2 and the adapter does not yet fill it | ⚠️ same | ✅ **one page unit per page** | ✅ **one page unit per page** |
+| Provider-side entity extraction | ⛔ deliberately unused — see below | ⛔ | ⛔ | ⛔ |
 | Runs offline | ⛔ | ✅ | ⛔ | ⛔ |
-| Requires cgo [^cgo] | no | see the module's own documentation | — | — |
-| Module dependencies | **none but `ovrin`** — REST over `net/http`, no Google SDK | — | — | — |
+| Requires cgo [^cgo] | no | see the module's own documentation | no | no |
+| Module dependencies | **none but `ovrin`** — REST over `net/http`, no Google SDK | — | **none but `ovrin`** — REST over `net/http`, SigV4 over `crypto/hmac`, no AWS SDK | **none but `ovrin`** — REST over `net/http`, header auth, no Azure SDK |
 
 **Authentication is where standard-library-only costs something.** `ocr/google`
 takes an API key directly, and a service account through
