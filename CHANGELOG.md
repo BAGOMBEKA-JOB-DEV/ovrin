@@ -174,6 +174,12 @@ prefix. Entries below say which module they affect where it is not the core.
   because an empty layout and no layout are different facts: a provider that
   looked and found no tables is not a provider that does not look.
 
+  `ocr/azure` fills it when configured with a layout model, and
+  `internal/prompt` renders the tables into the page the model reads — inside
+  the untrusted-content boundary, like everything else the document said. Key-
+  value pairs cross the seam and are not yet rendered; `ocr/google` and
+  `ocr/textract` still leave the field nil, which is what nil means.
+
   `Ref` is the loggable form of a claim about a table — "page 4, table 1, row
   3, column 2" — so a provenance entry or a review interface can say which
   value it means without repeating the value.
