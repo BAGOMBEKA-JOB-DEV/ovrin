@@ -36,7 +36,9 @@ DOCKER  ?= docker
 # Pinned to what CI installs. A different golangci-lint reports different
 # findings, which makes `make lint` passing locally mean nothing.
 GOLANGCI_LINT_VERSION ?= v2.12.2
-GOVULNCHECK_VERSION   ?= v1.1.4
+# v1.1.4 panics parsing Go 1.27 source — "unexpected expr:
+# *ast.KeyValueExpr" — so the version has to move with the toolchain.
+GOVULNCHECK_VERSION   ?= v1.7.0
 ACTIONLINT_VERSION    ?= v1.7.12
 
 # docs/rules.md §3.7. Never lower this to make a red build green.
