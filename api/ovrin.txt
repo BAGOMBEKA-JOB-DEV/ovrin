@@ -91,6 +91,7 @@ pkg ovrin, func WithReviewThreshold(float64) Option
 pkg ovrin, func WithScorer(Scorer) Option
 pkg ovrin, method (*Error) Error() string
 pkg ovrin, method (*Error) Unwrap() []error
+pkg ovrin, method (*Error) WithCause(error) *Error
 pkg ovrin, method (*Explanation) String() string
 pkg ovrin, method (*Result[T]) Explain(string) (*Explanation, bool)
 pkg ovrin, method (Kind) String() string

@@ -200,14 +200,20 @@ func (e *Error) Unwrap() []error {
 	}
 }
 
-// withCause attaches an underlying error, which becomes reachable through
+// WithCause attaches an underlying error, which becomes reachable through
 // [errors.Is] and [errors.As] without appearing in the message.
 //
-// Unexported: only this package builds an Error, and ADR-0019 settles that the
-// cause is reached through Unwrap rather than through an accessor. Exporting a
-// getter would give callers a second way to ask the same question, and the two
-// would drift.
-func (e *Error) withCause(err error) *Error {
+// Adapters live in their own modules and must be able to build an Error that
+// carries both a sentinel and the transport error underneath it — that is the
+// whole promise of the multi-error [Error.Unwrap], and without an exported
+// setter an adapter could only satisfy it by printing the cause into the
+// message, which is how a provider quoting a prompt back puts document content
+// in a log line.
+//
+// There is deliberately no matching getter. ADR-0019 settles that the cause is
+// reached through Unwrap, and a second way to ask the same question is a
+// second thing to keep in step.
+func (e *Error) WithCause(err error) *Error {
 	e.cause = err
 	return e
 }

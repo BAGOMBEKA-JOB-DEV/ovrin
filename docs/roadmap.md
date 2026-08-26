@@ -14,11 +14,10 @@ Work outside this repository that later phases depend on.
 - [ ] **Rename the GitHub repository** from `vellum` to `ovrin`. Until this is
       done the module path does not resolve
       ([ADR-0001](adr/0001-name-and-module-path.md)).
-- [ ] **Tag skyl v0.2.0**, releasing `Request.ResponseFormat`. It is on skyl's
-      `main` and not in `v0.1.0`, so without a tag `model/skyl` must pin a
-      pseudo-version ([ADR-0008](adr/0008-skyl-is-an-adapter.md)). Ovrin's core
-      does not depend on skyl, so this does not block v0.1 — only the default
-      adapter's tidiness.
+- [x] ~~**Tag skyl v0.2.0**~~ — not needed. `Request.ResponseFormat` is already
+      in skyl `v0.1.0`; the claim that it was not was an error, corrected in
+      [ADR-0008](adr/0008-skyl-is-an-adapter.md). `model/skyl` requires the real
+      tag.
 - [ ] **Seed the evaluation corpus** with five redistributable documents per
       category. Everything after this is unmeasurable without it
       ([ADR-0023](adr/0023-evaluation-corpus.md)).
