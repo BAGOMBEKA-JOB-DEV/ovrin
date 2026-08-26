@@ -72,14 +72,19 @@ pkg ovrin, const WeightGrounding float64
 pkg ovrin, const WeightOCR float64
 pkg ovrin, const WeightSchema float64
 pkg ovrin, const YearFirst DateOrder
+pkg ovrin, func Before(string, string) CrossFieldRule
 pkg ovrin, func Bytes([]byte) Source
+pkg ovrin, func CrossFieldFunc(string, func(CrossFields) CrossFieldResult) CrossFieldRule
 pkg ovrin, func Extract[T any](context.Context, *Client, Source, ...Option) (*Result[T], error)
 pkg ovrin, func File(string) Source
 pkg ovrin, func ModelChain(...Model) Model
 pkg ovrin, func New(...Option) *Client
 pkg ovrin, func OCRChain(...OCR) OCR
 pkg ovrin, func Reader(io.Reader) Source
+pkg ovrin, func Sum(string, Tolerance, ...string) CrossFieldRule
+pkg ovrin, func SumItems(string, string, Tolerance, ...string) CrossFieldRule
 pkg ovrin, func WithConcurrency(int) Option
+pkg ovrin, func WithCrossField(...CrossFieldRule) Option
 pkg ovrin, func WithDateOrder(DateOrder) Option
 pkg ovrin, func WithHook(Hook) Option
 pkg ovrin, func WithMaxDecompressedBytes(int64) Option
@@ -104,6 +109,10 @@ pkg ovrin, method (*Error) Unwrap() []error
 pkg ovrin, method (*Error) WithCause(error) *Error
 pkg ovrin, method (*Explanation) String() string
 pkg ovrin, method (*Result[T]) Explain(string) (*Explanation, bool)
+pkg ovrin, method (CrossFields) Count(string) int
+pkg ovrin, method (CrossFields) Number(string) (float64, bool)
+pkg ovrin, method (CrossFields) Text(string) (string, bool)
+pkg ovrin, method (CrossFields) Time(string) (time.Time, bool)
 pkg ovrin, method (Kind) String() string
 pkg ovrin, method (Op) String() string
 pkg ovrin, method (Reading) String() string
@@ -118,6 +127,16 @@ pkg ovrin, type Content struct, MediaType string
 pkg ovrin, type Content struct, Page int
 pkg ovrin, type Content struct, Reading Reading
 pkg ovrin, type Content struct, Text string
+pkg ovrin, type CrossFieldResult struct
+pkg ovrin, type CrossFieldResult struct, Applicable bool
+pkg ovrin, type CrossFieldResult struct, Fields []string
+pkg ovrin, type CrossFieldResult struct, Message string
+pkg ovrin, type CrossFieldResult struct, Name string
+pkg ovrin, type CrossFieldResult struct, Passed bool
+pkg ovrin, type CrossFieldRule interface
+pkg ovrin, type CrossFieldRule interface, Check(CrossFields) CrossFieldResult
+pkg ovrin, type CrossFieldRule interface, Name() string
+pkg ovrin, type CrossFields map[string]any
 pkg ovrin, type DateOrder string
 pkg ovrin, type Document struct
 pkg ovrin, type Document struct, Bytes int64
@@ -261,6 +280,9 @@ pkg ovrin, type Source interface
 pkg ovrin, type Span struct
 pkg ovrin, type Span struct, End int
 pkg ovrin, type Span struct, Start int
+pkg ovrin, type Tolerance struct
+pkg ovrin, type Tolerance struct, Absolute float64
+pkg ovrin, type Tolerance struct, Relative float64
 pkg ovrin, type Usage struct
 pkg ovrin, type Usage struct, InputTokens int
 pkg ovrin, type Usage struct, OutputTokens int

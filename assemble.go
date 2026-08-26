@@ -23,6 +23,7 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 
 	v := validate.New(
 		validate.WithDateOrder(validate.DateOrder(cfg.dateOrder)),
+		validate.WithCrossFieldRules(internalRules(cfg.crossField)...),
 	)
 
 	a := &assembler{
@@ -30,9 +31,11 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 		cfg:     cfg,
 		v:       v,
 		fields:  make(map[string]FieldResult),
+		values:  make(validate.Fields),
 		suspect: pagesWithFindings(out.findings),
 	}
 	a.walk(sch.Fields, out.object, dst, "")
+	a.crossField()
 
 	res := &Result[T]{
 		Data:     data,
@@ -51,6 +54,7 @@ type assembler struct {
 	cfg     *config
 	v       *validate.Validator
 	fields  map[string]FieldResult
+	values  validate.Fields // converted values, for the cross-field rules
 	reasons []ReviewReason
 	suspect map[int]bool
 
@@ -128,8 +132,13 @@ func (a *assembler) field(f schema.Field, raw any, dst reflect.Value, key string
 func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key string) {
 	vr := a.v.Field(f, raw)
 
-	if vr.Converted && target.IsValid() && target.CanSet() {
-		set(target, vr.Value)
+	if vr.Converted {
+		// Only converted values reach a cross-field rule, so a rule never sees
+		// a fabricated zero and can tell "not read" from "read as nothing".
+		a.values[key] = vr.Value
+		if target.IsValid() && target.CanSet() {
+			set(target, vr.Value)
+		}
 	}
 
 	// Grounding: does this value actually appear in the document? A value that
@@ -183,6 +192,51 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 		a.required = append(a.required, conf)
 	} else {
 		a.optional = append(a.optional, conf)
+	}
+}
+
+// crossField runs the declared rules and folds each verdict back into the
+// fields it read.
+//
+// It runs after the walk because a rule reads several fields and cannot be
+// evaluated until all of them exist. A rule whose inputs were not extracted is
+// not a failure: the missing field is already reported by its own required
+// rule, and counting it twice would punish a document once for the absence and
+// again for the consequence.
+func (a *assembler) crossField() {
+	for _, r := range a.v.CrossField(a.values) {
+		if !r.Applicable {
+			continue
+		}
+		value, note := 1.0, "consistent with its siblings"
+		if !r.Passed {
+			value, note = 0.0, r.Message
+			a.valid = false
+			for _, key := range r.Fields {
+				a.reasons = append(a.reasons, ReviewReason{
+					Field: key,
+					Why:   "a cross-field rule failed: " + r.Name,
+				})
+			}
+		}
+		for _, key := range r.Fields {
+			f, ok := a.fields[key]
+			if !ok {
+				continue
+			}
+			f.Signals = append(f.Signals, Signal{
+				Name: SignalCrossField, Value: value, Weight: WeightCrossField, Note: note,
+			})
+			f.Confidence = rescore(f.Signals)
+			if !r.Passed {
+				f.Valid = false
+				f.Errors = append(f.Errors, &Error{
+					Op: OpValidate, Field: key, Kind: ErrSchema,
+					Message: "cross-field rule " + r.Name + ": " + r.Message,
+				})
+			}
+			a.fields[key] = f
+		}
 	}
 }
 

@@ -69,6 +69,29 @@ type Signal struct {
 path ovrin has, so the scorer redistributes weight across the signals that do
 apply.
 
+### Cross-field rules are declared on the client, not in a tag
+
+A rule spans several fields — `Sum("total", tol, "subtotal", "vat")` — and has
+no natural home on any one of them. The tag vocabulary is also closed at five
+rules ([ADR-0006](adr/0006-tag-grammar.md)), none of which could express "these
+three must add up". So they are an option:
+
+```go
+c := ovrin.New(
+    ovrin.WithModel(model),
+    ovrin.WithCrossField(
+        ovrin.Sum("total", ovrin.Tolerance{Absolute: 0.01}, "subtotal", "vat"),
+        ovrin.SumItems("total", "items", tol, "quantity", "unit_price"),
+        ovrin.Before("issued", "due"),
+    ),
+)
+```
+
+A rule whose inputs were not extracted is **not** a failure. The missing field
+is already reported by its own `required` rule, and counting it again would
+punish a document twice for one absence — so such a rule produces no signal at
+all rather than a zero.
+
 ### `grounding` deserves emphasis
 
 It is the cheapest strong signal available and it catches the failure that

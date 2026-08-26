@@ -244,3 +244,109 @@ func (m spyModel) Generate(context.Context, ovrin.ModelRequest) (*ovrin.ModelRes
 	*m.called = true
 	return &ovrin.ModelResponse{JSON: []byte(`{}`)}, nil
 }
+
+// The cross_field signal is the one that catches a misread digit every other
+// signal accepts: a wrong total is still a number, still passes its type, its
+// format and its range. Only its relationship to the other fields betrays it.
+func TestCrossFieldSignalFires(t *testing.T) {
+	t.Parallel()
+
+	type Invoice struct {
+		Subtotal float64 `ovrin:"subtotal before tax,required,min=0"`
+		VAT      float64 `ovrin:"tax amount,required,min=0"`
+		Total    float64 `ovrin:"total including tax,required,min=0"`
+	}
+
+	rule := ovrin.Sum("total", ovrin.Tolerance{Absolute: 0.01}, "subtotal", "vat")
+	words := []string{"SUBTOTAL", "1,240,000", "VAT", "223,200", "TOTAL", "1,463,200"}
+
+	t.Run("consistent totals score and pass", func(t *testing.T) {
+		t.Parallel()
+		res := extract[Invoice](t, map[string]any{
+			"subtotal": 1240000.0, "vat": 223200.0, "total": 1463200.0,
+		}, words, ovrin.WithCrossField(rule))
+
+		total := res.Fields["total"]
+		if !hasSignal(total.Signals, ovrin.SignalCrossField) {
+			t.Fatalf("no cross_field signal on total; signals: %v", names(total.Signals))
+		}
+		if !res.Valid {
+			t.Errorf("Valid = false on a consistent document")
+		}
+	})
+
+	t.Run("a total that does not add up is caught", func(t *testing.T) {
+		t.Parallel()
+		// Every field is a well-formed positive number satisfying min=0. Only
+		// the arithmetic is wrong.
+		res := extract[Invoice](t, map[string]any{
+			"subtotal": 1240000.0, "vat": 223200.0, "total": 9999999.0,
+		}, words, ovrin.WithCrossField(rule))
+
+		if res.Valid {
+			t.Error("Valid = true although the total does not add up")
+		}
+		if !res.NeedsReview {
+			t.Error("NeedsReview = false although a cross-field rule failed")
+		}
+
+		total := res.Fields["total"]
+		var cf ovrin.Signal
+		for _, s := range total.Signals {
+			if s.Name == ovrin.SignalCrossField {
+				cf = s
+			}
+		}
+		if cf.Name == "" {
+			t.Fatalf("no cross_field signal; signals: %v", names(total.Signals))
+		}
+		if cf.Value != 0 {
+			t.Errorf("cross_field = %v on a failing rule, want 0", cf.Value)
+		}
+
+		found := false
+		for _, r := range res.Reasons {
+			if r.Field == "total" && contains(r.Why, "cross-field") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no review reason names the cross-field failure; reasons: %v", res.Reasons)
+		}
+	})
+
+	t.Run("a rule whose inputs are missing is not a failure", func(t *testing.T) {
+		t.Parallel()
+		// The subtotal was never extracted, so the sum cannot be checked. That
+		// is not the total's fault: the missing field is already reported by
+		// its own required rule, and blaming the total would punish the
+		// document twice for one absence.
+		res := extract[Invoice](t, map[string]any{
+			"vat": 223200.0, "total": 1463200.0,
+		}, words, ovrin.WithCrossField(rule))
+
+		total := res.Fields["total"]
+		if hasSignal(total.Signals, ovrin.SignalCrossField) {
+			t.Error("a cross_field signal was recorded although the rule could not run")
+		}
+	})
+}
+
+func hasSignal(signals []ovrin.Signal, name string) bool {
+	for _, s := range signals {
+		if s.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func names(signals []ovrin.Signal) []string {
+	out := make([]string, 0, len(signals))
+	for _, s := range signals {
+		out = append(out, s.Name)
+	}
+	return out
+}
+
+func contains(s, sub string) bool { return strings.Contains(s, sub) }

@@ -35,6 +35,8 @@ type config struct {
 	reading   ReadingMode
 	dateOrder DateOrder
 
+	crossField []CrossFieldRule
+
 	reviewThreshold     float64
 	minTextDensity      float64
 	maxReplacementRatio float64

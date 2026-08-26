@@ -2,6 +2,8 @@ package ovrin
 
 import (
 	"fmt"
+	"math"
+	"strings"
 
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/ground"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
@@ -103,7 +105,7 @@ func (defaultScorer) Score(f FieldEvidence) (float64, []Signal) {
 			return
 		}
 		conf = limit
-		signals = append(signals, Signal{Name: name, Note: why})
+		signals = append(signals, Signal{Name: name, Value: limit, Note: why})
 	}
 	if ruleFailed {
 		cap(CapRuleFailed, "capped:rule", "a declared rule failed")
@@ -210,4 +212,34 @@ func (a *assembler) score(f schema.Field, vr validate.Result, gr ground.Result, 
 		s = defaultScorer{}
 	}
 	return s.Score(ev)
+}
+
+// capPrefix marks a signal that records a ceiling rather than evidence. Such a
+// signal carries the ceiling as its Value and zero weight, so it constrains the
+// result without moving the mean.
+const capPrefix = "capped:"
+
+// rescore recomputes a confidence after a signal has been added late.
+//
+// Cross-field rules run after the whole schema has been walked, because a rule
+// reads several fields and cannot be evaluated until all of them exist. Folding
+// its verdict in means recomputing the mean and reapplying whichever ceilings
+// had already bound — which is why a ceiling records its limit as its Value.
+func rescore(signals []Signal) float64 {
+	var sum, weight float64
+	limit := 1.0
+	for _, s := range signals {
+		if strings.HasPrefix(s.Name, capPrefix) {
+			if s.Value < limit {
+				limit = s.Value
+			}
+			continue
+		}
+		sum += s.Value * s.Weight
+		weight += s.Weight
+	}
+	if weight == 0 {
+		return 0
+	}
+	return round2(math.Min(sum/weight, limit))
 }
