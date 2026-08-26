@@ -20,10 +20,22 @@ Ovrin depending on skyl would not violate that rule, but it would apply the
 same tax to ovrin's users — including the ones who want to run a local model,
 or who already have an LLM client and do not want a second one in `go.sum`.
 
-Skyl's structured-output support — `Request.ResponseFormat`, the mechanism
-ovrin needs — **is on `main` but is not in the `v0.1.0` tag**. A hard dependency
-would mean ovrin v0.1 either pins a pseudo-version off an untagged commit, or
-does not ship until skyl cuts v0.2.0.
+> **Correction, 2026-08-26.** This section originally claimed that skyl's
+> `Request.ResponseFormat` was on `main` but not in the `v0.1.0` tag, and that
+> a hard dependency would therefore block ovrin's first release. **That was
+> false.** The structured-output commit (`9888f9e`) is an ancestor of `v0.1.0`
+> (`9990e6c`), `git show v0.1.0:request.go` contains the field, and the module
+> proxy serves it. The claim was taken from a survey and never verified against
+> the tag. It is corrected here rather than quietly deleted, because a decision
+> record that argued from a fact should show when the fact was wrong.
+>
+> The decision below is unaffected: it rests on the dependency-quarantine
+> argument and on letting users bring their own model, neither of which
+> depended on the release timing. But the release-blocking argument carried
+> weight at the time and should not have.
+
+Skyl's structured-output support is `Request.ResponseFormat`, and it is
+available from `v0.1.0`.
 
 Skyl's `Part` interface is **closed** — it has an unexported method and exactly
 four implementations, with its ADR-0008 stating explicitly that widening it
@@ -65,10 +77,8 @@ Because skyl's `Part` set is closed and has no PDF member, the adapter sends
 text and `skyl.Image` parts only. Rasterising is therefore ovrin's problem, not
 the adapter's — see [ADR-0010](0010-no-cgo-in-core.md).
 
-A prerequisite is recorded in [`docs/roadmap.md`](../roadmap.md): **tag skyl
-v0.2.0** so this adapter can require a real version rather than a pseudo-version
-off `main`. Ovrin's own v0.1 does not block on it, because the core does not
-depend on skyl at all.
+`model/skyl` requires `skyl v0.1.0` — a real tag, not a pseudo-version. There
+is no release prerequisite on skyl.
 
 ## Consequences
 

@@ -1,0 +1,36 @@
+{
+  "account": "7781200034",
+  "account_name": "RWENZORI COFFEE HULLERS",
+  "bank": "ALBERTINE MICROFINANCE LTD",
+  "currency": "UGX",
+  "period_start": "2026-04-01",
+  "period_end": "2026-04-30",
+  "opening": 2050000,
+  "closing": 1394500,
+  "transactions": [
+    {
+      "date": "2026-04-02",
+      "description": "LOAN REPAYMENT",
+      "debit": 420000,
+      "balance": 1630000
+    },
+    {
+      "date": "2026-04-09",
+      "description": "COFFEE SALE DEPOSIT",
+      "credit": 915000,
+      "balance": 2545000
+    },
+    {
+      "date": "2026-04-18",
+      "description": "ELECTRICITY BILL",
+      "debit": 214500,
+      "balance": 2330500
+    },
+    {
+      "date": "2026-04-26",
+      "description": "WAGES",
+      "debit": 936000,
+      "balance": 1394500
+    }
+  ]
+}

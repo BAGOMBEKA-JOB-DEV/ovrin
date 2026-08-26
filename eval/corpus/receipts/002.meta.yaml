@@ -1,0 +1,15 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: good-scan
+pages: 1
+language: en
+notes: |
+  Office flatbed: rotated 0.7 degrees, one blur pass, sensor noise at sigma
+  2.2, sixty dust specks.
+  
+  No cashier, no subtotal and no separate tax line, so three fields are
+  absent. The quantity is fractional — 32.50 litres — which is the kind of
+  number a reader primed on whole units gets wrong.

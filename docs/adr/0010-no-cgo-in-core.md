@@ -41,7 +41,7 @@ validation and confidence all live there and all cross-compile.
 
 **Rasterising is an optional seam** with no default implementation in the core:
 
-```go
+```go mirror
 // Renderer rasterises a document page to an image.
 type Renderer interface {
     Render(ctx context.Context, doc Document, page int, dpi int) (image.Image, error)

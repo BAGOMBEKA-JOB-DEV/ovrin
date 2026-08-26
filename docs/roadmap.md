@@ -14,11 +14,10 @@ Work outside this repository that later phases depend on.
 - [ ] **Rename the GitHub repository** from `vellum` to `ovrin`. Until this is
       done the module path does not resolve
       ([ADR-0001](adr/0001-name-and-module-path.md)).
-- [ ] **Tag skyl v0.2.0**, releasing `Request.ResponseFormat`. It is on skyl's
-      `main` and not in `v0.1.0`, so without a tag `model/skyl` must pin a
-      pseudo-version ([ADR-0008](adr/0008-skyl-is-an-adapter.md)). Ovrin's core
-      does not depend on skyl, so this does not block v0.1 — only the default
-      adapter's tidiness.
+- [x] ~~**Tag skyl v0.2.0**~~ — not needed. `Request.ResponseFormat` is already
+      in skyl `v0.1.0`; the claim that it was not was an error, corrected in
+      [ADR-0008](adr/0008-skyl-is-an-adapter.md). `model/skyl` requires the real
+      tag.
 - [ ] **Seed the evaluation corpus** with five redistributable documents per
       category. Everything after this is unmeasurable without it
       ([ADR-0023](adr/0023-evaluation-corpus.md)).
@@ -34,41 +33,41 @@ confidence.
 OCR providers that accept a PDF directly.
 
 **Core**
-- [ ] Format detection by content ([`pipeline.md`](pipeline.md) stage 1)
-- [ ] PDF text-layer extraction with positions, in-tree
+- [x] Format detection by content ([`pipeline.md`](pipeline.md) stage 1)
+- [x] PDF text-layer extraction with positions, in-tree
       ([ADR-0011](adr/0011-pdf-text-extraction.md)) — the largest single piece
       of work here by a wide margin
-- [ ] Resource limits, enforced before allocation
+- [x] Resource limits, enforced before allocation
       ([ADR-0020](adr/0020-resource-limits.md))
-- [ ] Offset-preserving normalisation ([ADR-0015](adr/0015-provenance.md))
-- [ ] Schema reflection and the tag grammar
+- [x] Offset-preserving normalisation ([ADR-0015](adr/0015-provenance.md))
+- [x] Schema reflection and the tag grammar
       ([ADR-0005](adr/0005-schemas-are-go-structs.md),
       [ADR-0006](adr/0006-tag-grammar.md))
-- [ ] Prompt construction with structural separation
+- [x] Prompt construction with structural separation
       ([ADR-0017](adr/0017-untrusted-document-content.md))
-- [ ] The three seams ([ADR-0007](adr/0007-model-seam.md),
+- [x] The three seams ([ADR-0007](adr/0007-model-seam.md),
       [ADR-0009](adr/0009-ocr-seam.md), [ADR-0010](adr/0010-no-cgo-in-core.md))
-- [ ] Validation: `required`, type checking, `min`, `max`, `format`, `enum`
+- [x] Validation: `required`, type checking, `min`, `max`, `format`, `enum`
       ([ADR-0006](adr/0006-tag-grammar.md), [ADR-0029](adr/0029-v01-scope-corrected.md))
-- [ ] Nested structs and slices, to full depth
-- [ ] Cross-field validation rules, and the `cross_field` signal
-- [ ] `Explain` and its `String()` rendering
+- [x] Nested structs and slices, to full depth
+- [x] Cross-field validation rules, and the `cross_field` signal
+- [x] `Explain` and its `String()` rendering
       ([ADR-0016](adr/0016-explain-returns-data.md))
-- [ ] Grounding, and the `grounding` signal
-- [ ] `Result[T]`, `FieldResult`, partial results
+- [x] Grounding, and the `grounding` signal
+- [x] `Result[T]`, `FieldResult`, partial results
       ([ADR-0004](adr/0004-partial-results.md))
-- [ ] Confidence scoring over the signals available without a second reading
-- [ ] Errors: sentinels and `*Error` ([ADR-0019](adr/0019-error-model.md))
-- [ ] Hooks ([ADR-0021](adr/0021-observability.md))
+- [x] Confidence scoring over the signals available without a second reading
+- [x] Errors: sentinels and `*Error` ([ADR-0019](adr/0019-error-model.md))
+- [x] Hooks ([ADR-0021](adr/0021-observability.md))
 
 **Modules**
-- [ ] `model/skyl`
-- [ ] `ocr/google`
+- [x] `model/skyl`
+- [x] `ocr/google`
 
 **Quality**
-- [ ] The offline sandbox ([ADR-0022](adr/0022-offline-testing.md))
-- [ ] The shared adapter contract suite
-- [ ] Evaluation harness, running against the seeded corpus
+- [x] The offline sandbox ([ADR-0022](adr/0022-offline-testing.md))
+- [x] The shared adapter contract suite
+- [x] Evaluation harness, running against the seeded corpus
 
 **Explicitly not in v0.1**, and version-marked wherever the guides show them
 ([ADR-0029](adr/0029-v01-scope-corrected.md)): two readings and

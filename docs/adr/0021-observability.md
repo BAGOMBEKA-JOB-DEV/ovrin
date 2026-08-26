@@ -25,7 +25,7 @@ accident when someone adds a helpful attribute.
 
 **The core emits hooks.** One function type, no dependencies:
 
-```go
+```go mirror
 type Hook func(ctx context.Context, ev Event)
 
 type Event struct {

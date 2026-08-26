@@ -19,16 +19,29 @@ and cross-validation possible at all.
 ## 1. Detect
 
 **In:** a `Source` — an `io.Reader`, a `[]byte`, or a path.
-**Out:** a `Document` with a known `Kind` and page count.
+**Out:** a `Document` with a known `Kind`.
 
 Format is determined by content, never by file extension or a caller-supplied
 MIME type. A `.pdf` that is actually a JPEG is common enough — mail systems
 rename things — and trusting the name is how a parser gets handed input it was
 not written for.
 
-Limits are checked here, before anything is read into memory
-([ADR-0020](adr/0020-resource-limits.md)). Source size, page count and object
-count are all rejected at the door rather than after allocation.
+**The page count is usually not known yet**, and is not guessed. PNG, JPEG and
+WebP are structurally one page, so `Document.Pages` is 1. For PDF, TIFF, DOCX,
+XLSX and CSV, counting pages means parsing the format, which is stage 2 — so
+`Pages` is 0, meaning *not yet known*, never 1 as a placeholder. Rule
+[§8.5](rules.md#8-confidence-and-provenance) forbids inventing a value to fill
+a field, and a page count is a value.
+
+**What is enforced here, and what is not.** Only the source-size limit — and,
+for ZIP containers, the object count — can be checked at the door
+([ADR-0020](adr/0020-resource-limits.md)). The other limits are *primitives*
+established here and spent by later stages: a limited reader that reports which
+ceiling it hit, a cumulative byte counter shared across streams, and a
+recursion budget passed as a parameter. That split is deliberate. Enforcement
+is structural rather than remembered — a decompressor is constructed *inside*
+its limited reader, so the wrapping cannot be forgotten by a later
+contributor.
 
 **Fails on:** an unrecognised format (`ErrUnsupportedFormat`), encryption
 (`ErrEncrypted`), a limit (`ErrLimitExceeded`).
@@ -138,7 +151,7 @@ unbounded recursion, a rule that cannot apply to its field's type.
 ## 5. Prompt
 
 **In:** the normalised content and the JSON Schema.
-**Out:** a `ModelRequest`.
+**Out:** a request, which the core converts into a `ModelRequest`.
 
 This stage is in the core and not in adapters, which is what makes the security
 property hold identically across every provider

@@ -1,0 +1,24 @@
+{
+  "account": "3300114552",
+  "account_name": "KAZO DAIRY COOPERATIVE",
+  "bank": "PEARL SAVINGS AND CREDIT BANK",
+  "currency": "UGX",
+  "period_start": "2026-03-01",
+  "period_end": "2026-03-31",
+  "opening": 760000,
+  "closing": 1145000,
+  "transactions": [
+    {
+      "date": "2026-03-06",
+      "description": "MILK DELIVERY PAYMENT",
+      "credit": 520000,
+      "balance": 1280000
+    },
+    {
+      "date": "2026-03-14",
+      "description": "VET SUPPLIES",
+      "debit": 135000,
+      "balance": 1145000
+    }
+  ]
+}

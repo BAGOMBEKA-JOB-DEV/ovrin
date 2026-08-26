@@ -87,6 +87,44 @@ prefix. Entries below say which module they affect where it is not the core.
 - **`docs/observability.md`.** The span and metric names `ovrin/otel` will
   emit, treated as API. ADR-0021 promised this document existed; it did not.
 
+- **The pipeline, and the first extraction.** `Extract` no longer panics. A
+  document now runs the nine stages end to end — detect, acquire, normalise,
+  schema, prompt, generate, validate, ground, score — and returns a typed
+  struct with per-field confidence, provenance and review reasons.
+
+  The orchestration lives in the root package rather than under `internal/`.
+  It touches nearly the whole public type set, and an internal package cannot
+  import the root, so it would have needed a local twin of `Model`, `OCR`,
+  `Page`, `Content`, `FieldResult`, `Signal`, `Provenance`, `Metadata` and
+  `Event`, with a conversion at every stage boundary — a great deal of
+  mechanical code to buy a boundary that unexported identifiers already give.
+
+- **`internal/img`.** PNG and JPEG decoding, with the pixel ceiling enforced
+  from the header before any allocation: a file declaring 20,000 × 20,000 costs
+  the bytes already read and nothing more.
+
+- **The default scorer.** A weighted mean over the signals that applied, with
+  the weight of an absent signal redistributed rather than counted as zero, and
+  then the ceilings. A ceiling that binds is recorded as a zero-weight
+  `capped:…` signal, because `docs/confidence.md` promises every score
+  decomposes into its signals and a confidence below the mean with nothing to
+  explain the gap would make that claim false.
+
+- **`OCRChain` and `ModelChain`.** They advance on throttling, outages and
+  transport failures, and never on a bad credential, a rejected request or a
+  schema ovrin itself refused — those fail identically everywhere, and
+  degrading quietly to the third provider hides a misconfiguration that should
+  be loud. Exhausting a chain reports every attempt, not only the last.
+
+- **`FieldResult.Validation`.** Each declared rule and whether it passed.
+  Distinct from `Errors`, which records only failures: the rules that *passed*
+  are what make a confidence score checkable by hand.
+
+- **`examples/receipt`.** A synthetic receipt and a programme that extracts it
+  with a real model. Its own module, for the same reason every adapter is one —
+  it imports `model/skyl`, and keeping it in the root module would put skyl in
+  the `go.sum` of every ovrin user to run a programme none of them run.
+
 ### Notes
 
 - No release has been made. The install commands in the README will not work

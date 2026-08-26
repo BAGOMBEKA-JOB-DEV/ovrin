@@ -1,4 +1,8 @@
 # Binaries
+#
+# `go build ./...` drops a binary named after each main package in the
+# working directory. examples/receipt is the one that exists today.
+/receipt
 *.exe
 *.dll
 *.so

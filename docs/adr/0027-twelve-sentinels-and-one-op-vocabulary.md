@@ -1,6 +1,6 @@
 # ADR-0027: A twelfth sentinel, and one `Op` vocabulary
 
-**Status:** Accepted · **Date:** 2026-08-26 · **Amends** [ADR-0019](0019-error-model.md), [ADR-0021](0021-observability.md)
+**Status:** Accepted · **Date:** 2026-08-26 · **Amended by** [ADR-0030](0030-an-internal-failure-sentinel.md) · **Amends** [ADR-0019](0019-error-model.md), [ADR-0021](0021-observability.md)
 
 ## Context
 
@@ -55,7 +55,7 @@ ADR-0018's lists are restated against the real vocabulary:
 **One `Op` type, shared by `Error` and `Event`**, named after the pipeline
 stages so that a value can be found in [`pipeline.md`](../pipeline.md):
 
-```go
+```go mirror
 type Op string
 
 const (

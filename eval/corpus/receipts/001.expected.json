@@ -1,0 +1,11 @@
+{
+  "number": "KFM-2026-114552",
+  "vendor": "Kabalagala Fresh Market",
+  "issued": "2026-03-18",
+  "currency": "UGX",
+  "subtotal": 66500,
+  "tax": 11970,
+  "total": 78470,
+  "method": "mobile-money",
+  "cashier": "T. Nabirye"
+}

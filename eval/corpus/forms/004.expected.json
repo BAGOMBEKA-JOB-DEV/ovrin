@@ -1,0 +1,16 @@
+{
+  "reference": "DTL-2026-005390",
+  "received": "2026-04-28",
+  "applicant": {
+    "name": "PATRICK MUGISHA BYARUHANGA",
+    "phone": "+256772660341",
+    "address": "P.O. BOX 4, FORT PORTAL"
+  },
+  "business": "RWENZORI COFFEE HULLERS",
+  "activity": "COFFEE HULLING AND GRADING",
+  "district": "KABAROLE",
+  "employees": 11,
+  "fee_paid": 150000,
+  "renewal": true,
+  "tax_cleared": false
+}

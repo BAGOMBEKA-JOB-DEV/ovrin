@@ -1,0 +1,13 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: good-scan
+pages: 1
+language: en
+notes: |
+  Office flatbed: rotated 0.7 degrees, one blur pass for the platen's
+  optical softness, Gaussian sensor noise at sigma 1.2, sixty single-pixel
+  dust specks. No text layer, so this document has to be
+  read by OCR or by vision.

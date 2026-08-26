@@ -1,0 +1,15 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: good-scan
+pages: 1
+language: en
+notes: |
+  Office flatbed, same chain as 002.
+  
+  A driving permit, which carries neither nationality nor place of birth, so
+  both fields are absent. It also carries a CLASSES line that no schema field
+  corresponds to; an extractor that files "B CM" under nationality has
+  fabricated.

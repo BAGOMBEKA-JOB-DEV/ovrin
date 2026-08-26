@@ -46,7 +46,7 @@ So confidence is built from several signals that fail in uncorrelated ways
 
 ## Signals
 
-```go
+```go mirror
 type Signal struct {
     Name   string
     Value  float64  // 0..1
@@ -68,6 +68,29 @@ type Signal struct {
 `ocr` signal. Treating that as 0.0 would penalise the most accurate acquisition
 path ovrin has, so the scorer redistributes weight across the signals that do
 apply.
+
+### Cross-field rules are declared on the client, not in a tag
+
+A rule spans several fields — `Sum("total", tol, "subtotal", "vat")` — and has
+no natural home on any one of them. The tag vocabulary is also closed at five
+rules ([ADR-0006](adr/0006-tag-grammar.md)), none of which could express "these
+three must add up". So they are an option:
+
+```go
+c := ovrin.New(
+    ovrin.WithModel(model),
+    ovrin.WithCrossField(
+        ovrin.Sum("total", ovrin.Tolerance{Absolute: 0.01}, "subtotal", "vat"),
+        ovrin.SumItems("total", "items", tol, "quantity", "unit_price"),
+        ovrin.Before("issued", "due"),
+    ),
+)
+```
+
+A rule whose inputs were not extracted is **not** a failure. The missing field
+is already reported by its own `required` rule, and counting it again would
+punish a document twice for one absence — so such a rule produces no signal at
+all rather than a zero.
 
 ### `grounding` deserves emphasis
 
@@ -102,7 +125,10 @@ The default scorer is a weighted mean over available signals, with hard floors.
 | `cross_field` | 0.05 |
 
 **Hard floors**, applied after the mean, because some failures should not be
-averaged away:
+averaged away. A ceiling that actually binds is recorded as an extra
+zero-weight signal named `capped:…`, so a reader doing the arithmetic can see
+why the reported number is below the mean. Zero weight leaves the mean itself
+untouched:
 
 | Condition | Confidence capped at |
 |---|---|
@@ -128,6 +154,17 @@ format       1.00 × 0.05  = 0.050     parsed as currency
 
 `agreement` is absent because only one reading ran, so its 0.25 is excluded
 from the denominator rather than counted as a failure.
+
+Had a ceiling bound here, a further line would appear:
+
+```text
+capped:grounding   —          the value is not in the source
+```
+
+and the reported confidence would be the ceiling rather than the mean. A
+ceiling only binds when it is **below** the mean — it is a maximum, not a
+replacement. A value grounded at 0.0 whose other signals already drag the mean
+to 0.33 stays at 0.33, because `capped:grounding` is 0.35.
 
 **Aggregate confidence** on `Result` is the mean over fields, weighted by
 whether a field is `required`. A missing optional field should not drag down a
@@ -196,11 +233,13 @@ The default scorer is a starting point. A user with labelled documents can fit
 a better one to their own corpus, and it will beat our defaults on their
 documents.
 
-```go
+```go mirror
 type Scorer interface {
     Score(f FieldEvidence) (confidence float64, signals []Signal)
 }
+```
 
+```go
 c := ovrin.New(ovrin.WithScorer(myScorer))
 ```
 

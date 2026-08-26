@@ -1,0 +1,13 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: clean-digital
+pages: 1
+language: en
+notes: |
+  A digital original with a real text layer. The payment method is printed
+  "Mobile money" and the schema constrains it to mobile-money, so ground
+  truth records the constrained value: the enum is part of what the field
+  means, not a formatting preference.

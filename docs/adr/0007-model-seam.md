@@ -31,7 +31,7 @@ as the weakest one. It has to be in the core, on the near side of the seam.
 
 The seam is one method.
 
-```go
+```go mirror
 // Model produces structured JSON from document content.
 //
 // Implementations must be safe for concurrent use by multiple goroutines.

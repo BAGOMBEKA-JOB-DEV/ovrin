@@ -1,0 +1,34 @@
+{
+  "number": "INV-2026-0417",
+  "issued": "2026-03-14",
+  "due": "2026-04-13",
+  "purchase_order": "PO-88213",
+  "vendor": {
+    "name": "Nakawa Stationers Limited",
+    "address": "Plot 14 Jinja Road, Kampala",
+    "tax_id": "1002938475"
+  },
+  "bill_to": {
+    "name": "Makindye Secondary School",
+    "address": "PO Box 7712, Kampala",
+    "tax_id": "1009988771"
+  },
+  "currency": "UGX",
+  "subtotal": 1240000,
+  "tax": 223200,
+  "total": 1463200,
+  "items": [
+    {
+      "description": "A4 paper 80gsm",
+      "quantity": 40,
+      "unit_price": 12500,
+      "amount": 500000
+    },
+    {
+      "description": "Toner cartridge HP 26A",
+      "quantity": 4,
+      "unit_price": 185000,
+      "amount": 740000
+    }
+  ]
+}

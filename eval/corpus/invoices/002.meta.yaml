@@ -1,0 +1,19 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: clean-digital
+pages: 1
+language: en
+exclude:
+  - due
+notes: |
+  Clean digital, but deliberately incomplete: no purchase order, no tax
+  identifier on either party, and no subtotal or tax line — the invoice
+  shows a total only. Those five absences are the fabrication opportunities
+  this document exists to provide.
+  
+  The due date is printed 03/04/2026, which is 3 April or 4 March depending
+  on where it was written. Two careful readers would disagree, so it is
+  excluded from scoring rather than being scored against a guess.

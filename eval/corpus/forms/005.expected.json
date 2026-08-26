@@ -1,0 +1,17 @@
+{
+  "reference": "DTL-2026-005722",
+  "received": "2026-05-06",
+  "applicant": {
+    "name": "Esther Adikini Ocen",
+    "phone": "+256753220984",
+    "email": "esther.ocen@example.org",
+    "address": "P.O. Box 62, Soroti"
+  },
+  "business": "Ocen Grain Millers",
+  "activity": "Maize milling",
+  "district": "Soroti",
+  "employees": 9,
+  "fee_paid": 210000,
+  "renewal": true,
+  "tax_cleared": true
+}

@@ -1,0 +1,18 @@
+{
+  "reference": "DTL-2026-005114",
+  "received": "2026-04-19",
+  "applicant": {
+    "name": "GRACE ATIM ODONG",
+    "phone": "+256782110447",
+    "email": "grace.atim@example.org",
+    "address": "P.O. BOX 210, LIRA"
+  },
+  "business": "ATIM PRODUCE STORE",
+  "activity": "RETAIL OF CEREALS AND PULSES",
+  "district": "LIRA",
+  "employees": 4,
+  "fee_paid": 85000,
+  "renewal": true,
+  "tax_cleared": true,
+  "declaration": "GRACE ATIM ODONG"
+}

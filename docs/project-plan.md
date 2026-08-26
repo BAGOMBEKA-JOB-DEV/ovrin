@@ -48,7 +48,7 @@ checks it.
 | Item | Blocked on | Owner |
 |---|---|---|
 | Module path resolving | GitHub repository still named `vellum`; must be renamed to `ovrin` | maintainer |
-| `model/skyl` pinning a real version | skyl has not tagged v0.2.0; `ResponseFormat` is on `main` only | maintainer |
+| ~~`model/skyl` pinning a real version~~ | **Not blocked.** `ResponseFormat` is in skyl `v0.1.0`; the earlier claim was wrong | — |
 | Any accuracy statement | Evaluation corpus is empty | maintainer, contributors |
 | Confidence calibration | Corpus, then a calibration run | — |
 | CI proving anything | No Go code to build | — |

@@ -1,0 +1,18 @@
+source: synthetic
+licence: CC0-1.0
+redacted: nothing was redacted because nothing was ever real; every name,
+          address, tax identifier, account number and telephone number was
+          invented to have the right shape and no other property
+difficulty: good-scan
+pages: 1
+language: en
+notes: |
+  Office flatbed: rotated 0.7 degrees, one blur pass, noise at sigma 1.2,
+  sixty specks.
+  
+  The two lines at the foot are a machine-readable zone in the ICAO 9303
+  shape. Its check digits are invented and do not validate — nothing in this
+  repository claims otherwise. It is there because a real passport has one
+  and it is a dense band of characters that a reader may try to extract
+  fields from; the surname in the MRZ agrees with the printed surname, so an
+  extractor reading either is right.

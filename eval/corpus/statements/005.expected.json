@@ -1,0 +1,24 @@
+{
+  "account": "5520019987",
+  "account_name": "ACHOLI HERITAGE TRUST",
+  "bank": "LAKESIDE COMMUNITY BANK",
+  "currency": "UGX",
+  "period_start": "2026-05-01",
+  "period_end": "2026-05-31",
+  "opening": 318000,
+  "closing": 742000,
+  "transactions": [
+    {
+      "date": "2026-05-07",
+      "description": "GRANT RECEIPT",
+      "credit": 600000,
+      "balance": 918000
+    },
+    {
+      "date": "2026-05-19",
+      "description": "PRINTING SERVICES",
+      "debit": 176000,
+      "balance": 742000
+    }
+  ]
+}

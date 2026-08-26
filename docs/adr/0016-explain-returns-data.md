@@ -29,7 +29,7 @@ compile time.
 
 `Explain` returns a value.
 
-```go
+```go mirror
 func (r *Result[T]) Explain(field string) (*Explanation, bool)
 
 type Explanation struct {

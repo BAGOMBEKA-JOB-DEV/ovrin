@@ -25,7 +25,7 @@ reinventing.
 
 Package-level sentinels for the kinds, and one typed error carrying detail.
 
-```go
+```go mirror
 var (
     ErrUnsupportedFormat = errors.New("ovrin: unsupported document format")
     ErrNoContent         = errors.New("ovrin: no readable content in document")

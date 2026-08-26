@@ -1,0 +1,15 @@
+{
+  "reference": "DTL-2026-004980",
+  "received": "2026-04-02",
+  "applicant": {
+    "name": "Joseph Kiprotich Wanyama",
+    "phone": "+256701903226",
+    "address": "P.O. Box 77, Mbale"
+  },
+  "business": "Wanyama Boda Repairs",
+  "activity": "Motorcycle repair",
+  "district": "Mbale",
+  "employees": 2,
+  "renewal": false,
+  "tax_cleared": false
+}

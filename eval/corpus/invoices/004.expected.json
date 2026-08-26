@@ -1,0 +1,37 @@
+{
+  "number": "SMS-7742",
+  "issued": "2026-01-21",
+  "vendor": {
+    "name": "SOROTI MOTOR SPARES",
+    "address": "PLOT 9 GWERI ROAD, SOROTI",
+    "tax_id": "1002211009"
+  },
+  "bill_to": {
+    "name": "TESO TRANSPORT SACCO",
+    "address": "P.O. BOX 25, SOROTI"
+  },
+  "currency": "UGX",
+  "subtotal": 2619000,
+  "tax": 471420,
+  "total": 3090420,
+  "items": [
+    {
+      "description": "BRAKE PAD SET",
+      "quantity": 12,
+      "unit_price": 78000,
+      "amount": 936000
+    },
+    {
+      "description": "ENGINE OIL 20L",
+      "quantity": 6,
+      "unit_price": 210000,
+      "amount": 1260000
+    },
+    {
+      "description": "AIR FILTER",
+      "quantity": 18,
+      "unit_price": 23500,
+      "amount": 423000
+    }
+  ]
+}

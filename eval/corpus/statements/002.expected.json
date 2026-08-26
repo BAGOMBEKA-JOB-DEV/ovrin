@@ -1,0 +1,31 @@
+{
+  "account": "0532013000",
+  "account_name": "Vollmer Werkzeuge GmbH",
+  "bank": "Rhein Handelsbank AG",
+  "currency": "EUR",
+  "period_start": "2026-03-01",
+  "period_end": "2026-03-31",
+  "opening": 18430.55,
+  "closing": 21905.05,
+  "iban": "DE89370400440532013000",
+  "transactions": [
+    {
+      "date": "2026-03-03",
+      "description": "SEPA credit - Kessler KG",
+      "credit": 4200.00,
+      "balance": 22630.55
+    },
+    {
+      "date": "2026-03-11",
+      "description": "Card purchase - fuel",
+      "debit": 185.50,
+      "balance": 22445.05
+    },
+    {
+      "date": "2026-03-22",
+      "description": "SEPA debit - insurance",
+      "debit": 540.00,
+      "balance": 21905.05
+    }
+  ]
+}

@@ -37,7 +37,7 @@ dependencies — which none of the above satisfies.
 **PDF text-layer extraction is implemented in `internal/pdf`, in the core
 module, with no external dependency.** Scope is deliberately narrow: parse the
 structure, decode the filters the standard library already provides
-(`compress/zlib` for FlateDecode, `compress/lzw`, ASCII85 and ASCIIHex by
+(`compress/zlib` for FlateDecode; LZWDecode, ASCII85 and ASCIIHex by
 hand), resolve font encodings and `ToUnicode` CMaps, and reconstruct text with
 positions from the text-showing operators.
 
@@ -64,6 +64,20 @@ text committed alongside.
 
 If this proves to be a mistake, the fallback is a `render`-style optional
 module wrapping `pdfcpu`, and the seam is already shaped for it.
+
+> **Correction, 2026-08-26.** This section originally listed `compress/lzw`
+> among the filters the standard library provides. **It cannot be used.** PDF's
+> LZWDecode defaults to `EarlyChange 1`, meaning the code width grows one code
+> earlier than in the GIF and TIFF variant; `compress/lzw` implements the
+> latter and exposes no parameter for it. The difference does not raise an
+> error — it produces wrong bytes from the first table growth, which is the
+> worst possible failure for a filter feeding a text extractor. The decoder is
+> written in-tree, with `earlyChange` as a parameter, and its
+> `earlyChange=false` path is cross-checked against `compress/lzw` in a test.
+>
+> Found while implementing, and recorded rather than quietly fixed, because the
+> decision below rests partly on how much the standard library gives us for
+> free — and it gives us slightly less than this ADR claimed.
 
 ## Consequences
 
