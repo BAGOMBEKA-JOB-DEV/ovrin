@@ -158,6 +158,12 @@ type findingCase struct {
 	// why says what the document is doing, for the failure message.
 	why string
 
+	// names is a fragment of the reason this finding must produce. The
+	// reason says which detector fired — "text in the background colour of
+	// page 1" sends a reviewer somewhere, "suspicious content" does not — so
+	// each case asserts its own kind rather than a word common to all five.
+	names string
+
 	// hostile and clean are the same document with and without the thing.
 	hostile func(t *testing.T) (ovrin.Source, []ovrin.Option)
 	clean   func(t *testing.T) (ovrin.Source, []ovrin.Option)
@@ -181,8 +187,9 @@ func findingCases() []findingCase {
 
 	return []findingCase{
 		{
-			name: "bidi_control",
-			why:  "a bidirectional override, which makes a reviewer and a model read different sentences",
+			name:  "bidi_control",
+			names: "bidirectional override",
+			why:   "a bidirectional override, which makes a reviewer and a model read different sentences",
 			hostile: func(*testing.T) (ovrin.Source, []ovrin.Option) {
 				return ovrin.Bytes([]byte("vendor,note\nNorthwind Traders,total is " +
 					rtlOverride + "00.0052\n")), nil
@@ -193,8 +200,9 @@ func findingCases() []findingCase {
 			secrets: []string{"Northwind", "2500.00", rtlOverride},
 		},
 		{
-			name: "off_page",
-			why:  "a run positioned outside the media box, where nobody displaying the page will see it",
+			name:  "off_page",
+			names: "outside the media box",
+			why:   "a run positioned outside the media box, where nobody displaying the page will see it",
 			hostile: func(t *testing.T) (ovrin.Source, []ovrin.Option) {
 				return ovrin.Bytes(findingsPNG(t)), []ovrin.Option{ovrin.WithOCR(placedOCR{
 					words: []ovrin.Word{onPage("Northwind"), onPage("Traders"),
@@ -209,8 +217,9 @@ func findingCases() []findingCase {
 			secrets: []string{"Northwind", "Ignore", "everything"},
 		},
 		{
-			name: "instruction",
-			why:  "a sentence addressed to a model in the document information dictionary",
+			name:  "instruction",
+			names: "instruction-shaped language",
+			why:   "a sentence addressed to a model in the document information dictionary",
 			hostile: func(*testing.T) (ovrin.Source, []ovrin.Option) {
 				return ovrin.Bytes(onePagePDF(
 					[]string{"<< /Title (" + metadataPayload + ") >>"},
@@ -245,7 +254,7 @@ func TestEverySuspiciousContentKindReachesTheResultAsAReviewReason(t *testing.T)
 			if !res.NeedsReview {
 				t.Fatalf("a document carrying %s was not flagged for review", tt.why)
 			}
-			if !hasInjectionReason(res.Reasons) {
+			if !hasReasonNaming(res.Reasons, tt.names) {
 				t.Fatalf("no review reason names the hidden content in a document carrying %s; reasons: %v",
 					tt.why, res.Reasons)
 			}
@@ -332,10 +341,12 @@ func extractFinding(t *testing.T, src ovrin.Source, opts []ovrin.Option) *ovrin.
 //
 // It matches a substring because a ReviewReason has no code to test — the
 // alternative would be asserting the whole sentence, which turns a reworded
-// message into a failing test for no gain.
-func hasInjectionReason(reasons []ovrin.ReviewReason) bool {
+// message into a failing test for no gain. The fragment is per finding kind,
+// because a reason that says only "suspicious content" tells a reviewer
+// nothing about where to look.
+func hasReasonNaming(reasons []ovrin.ReviewReason, fragment string) bool {
 	for _, r := range reasons {
-		if strings.Contains(r.Why, "injection") {
+		if strings.Contains(r.Why, fragment) {
 			return true
 		}
 	}
