@@ -46,7 +46,6 @@ ovrin/                        module github.com/BAGOMBEKA-JOB-DEV/ovrin
 │   ├── prompt/               instruction construction  ── ADR-0017
 │   ├── retry/                the one schema-invalid follow-up request
 │   ├── normalise/            offset-preserving text normalisation
-│   ├── layout/               the neutral table and key-value model
 │   ├── schema/               struct-tag reflection     ── ADR-0005
 │   ├── jsonschema/           Schema to JSON Schema
 │   ├── validate/             rule evaluation

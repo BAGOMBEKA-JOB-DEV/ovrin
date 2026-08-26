@@ -294,7 +294,7 @@ func Extract[T any](ctx context.Context, c *Client, src Source, opts ...Option) 
 		return nil, err
 	}
 
-	res := assemble[T](out, sch, &cfg)
+	res := assemble[T](ctx, out, sch, &cfg)
 	cfg.emit(ctx, Event{
 		Op: OpScore, Fields: len(res.Fields), Pages: res.Metadata.Pages,
 		Usage: res.Metadata.Usage, Confidence: res.Confidence,

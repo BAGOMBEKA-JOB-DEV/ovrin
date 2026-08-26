@@ -1,9 +1,11 @@
 package ovrin
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/compare"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/ground"
@@ -20,7 +22,7 @@ import (
 // makes a field the model omitted representable: it produces a FieldResult with
 // Found false rather than simply not appearing. A reply-driven walk would
 // silently lose exactly the information the caller most needs.
-func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
+func assemble[T any](ctx context.Context, out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 	var data T
 	dst := reflect.ValueOf(&data).Elem()
 
@@ -47,8 +49,17 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 		alt:     alt,
 		suspect: pagesWithFindings(out.findings),
 	}
+	// Validation and grounding both happen inside the walk, interleaved per
+	// field, so there is no separate pass to time. They are reported as two
+	// stages anyway because that is the vocabulary errors already use and the
+	// span names otel already maps — an Op that can appear on an Error and
+	// never on an Event makes a trace and a failure describe the same
+	// extraction in two different languages.
+	vStart := time.Now()
 	a.walk(sch.Fields, out.object, dst, "")
 	a.crossField()
+	cfg.emit(ctx, Event{Op: OpValidate, Fields: len(a.fields), Duration: time.Since(vStart)})
+	cfg.emit(ctx, Event{Op: OpGround, Fields: a.grounded, Duration: time.Since(vStart)})
 
 	// A page nothing could read is reported on the result, not only through a
 	// hook a caller may not be watching. Its fields are simply absent, and
@@ -98,6 +109,7 @@ type assembler struct {
 	// per-field Confidence values then disagreed whenever a cross-field rule
 	// applied. Holding keys and reading a.fields at the end means there is one
 	// source of truth and no ordering to get wrong.
+	grounded int      // fields grounding was able to look for
 	required []string // keys of required fields
 	optional []string
 }
@@ -200,6 +212,7 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 	}
 	if gr.Applicable {
 		ev.Provenance = []Provenance{provenanceOf(gr, a.out.reading, a.out.provider)}
+		a.grounded++
 	}
 
 	// Two readings of one document. When they differ, at least one is wrong

@@ -36,12 +36,15 @@ const pointsPerInch = 72.0
 
 // Analysis is what a [Provider] puts in [ovrin.Recognition.Raw].
 //
-// Normalisation deliberately discards structure Document Intelligence reports —
-// paragraphs, tables, key-value pairs, selection marks, barcodes, formulas and
-// handwriting styles (ADR-0009) — and this is the route back to it. The result
-// is kept as bytes rather than as decoded structs so that this package does not
-// have to export thirty wire types, and so that a caller can unmarshal it into
-// whatever shape they actually want.
+// Tables and key-value pairs no longer need it: they cross the seam in
+// [ovrin.Recognition.Layout] whenever the configured model reports them
+// (ADR-0009). Everything else Document Intelligence reports and ovrin has no
+// shape for — paragraphs, selection marks, barcodes, formulas, handwriting
+// styles, page rotation, a table's caption — is still discarded by
+// normalisation, and this is the route back to it. The result is kept as bytes
+// rather than as decoded structs so that this package does not have to export
+// thirty wire types, and so that a caller can unmarshal it into whatever shape
+// they actually want.
 type Analysis struct {
 	// JSON is the operation's own reply, exactly as it arrived. For a document
 	// it is the whole reply rather than a slice of it, because the service
@@ -136,6 +139,95 @@ type analyzeResult struct {
 
 	Pages     []resultPage `json:"pages"`
 	Languages []language   `json:"languages"`
+
+	// Tables and KeyValuePairs are the structure a layout or document model
+	// reports. They are stated once for the whole result, with each element
+	// naming the pages it sits on, rather than nested under a page — which is
+	// why [pageLayout] has to select rather than simply convert.
+	//
+	// The read model returns neither, and a response from it leaves both nil.
+	// That is not the same as a layout model finding no tables, and the
+	// difference is what [ovrin.Recognition.Layout] being a pointer exists to
+	// carry (ADR-0009).
+	Tables        []table        `json:"tables"`
+	KeyValuePairs []keyValuePair `json:"keyValuePairs"`
+}
+
+// boundingRegion is a polygon on a named page.
+//
+// Structure is reported for the document rather than for a page, so every part
+// of it says which page it is on. A table that crosses a page break has one
+// region per page; the first is where the table starts and is the page it is
+// reported on, because a table has to be reported somewhere and the page it
+// begins on is the only non-arbitrary choice.
+type boundingRegion struct {
+	PageNumber int       `json:"pageNumber"`
+	Polygon    []float64 `json:"polygon"`
+}
+
+// table is one table the service found, stated as a grid rather than as a
+// picture: it is the row and column indexes that make "the 40 in the Quantity
+// column" expressible, and they are what survives the seam.
+type table struct {
+	RowCount        int              `json:"rowCount"`
+	ColumnCount     int              `json:"columnCount"`
+	Cells           []tableCell      `json:"cells"`
+	BoundingRegions []boundingRegion `json:"boundingRegions"`
+
+	// Spans and Caption are decoded and never read. The caption is document
+	// content with no field on [ovrin.Table] to hold it, and reporting it as a
+	// cell would put it in a grid position it does not occupy; it stays in
+	// [Analysis.JSON]. They are declared so the fields are accounted for
+	// rather than looking forgotten.
+	Spans   []span          `json:"spans"`
+	Caption *keyValueRegion `json:"caption"`
+}
+
+// tableCell is one cell of a table.
+//
+// RowSpan and ColumnSpan are absent from the response when they are one, which
+// decodes to zero — and zero and one both mean one cell on [ovrin.Cell], so
+// nothing has to be repaired here.
+type tableCell struct {
+	Kind            string           `json:"kind"`
+	RowIndex        int              `json:"rowIndex"`
+	ColumnIndex     int              `json:"columnIndex"`
+	RowSpan         int              `json:"rowSpan"`
+	ColumnSpan      int              `json:"columnSpan"`
+	Content         string           `json:"content"`
+	BoundingRegions []boundingRegion `json:"boundingRegions"`
+	Spans           []span           `json:"spans"`
+}
+
+// The cell kinds Document Intelligence labels a cell with.
+//
+// The service always sets one, so an empty kind means a response that did not
+// come from a model that classifies cells rather than a cell it could not
+// classify.
+const (
+	kindContent      = "content"
+	kindRowHeader    = "rowHeader"
+	kindColumnHeader = "columnHeader"
+	kindStubHead     = "stubHead"
+	kindDescription  = "description"
+)
+
+// keyValuePair is a label and the thing it labels, as the service reports it.
+//
+// Value is a pointer because a form field the service found and read nothing in
+// arrives with no value at all. That is a fact about the document — the box was
+// blank — and dropping the pair would turn it into "there is no such box".
+type keyValuePair struct {
+	Key        *keyValueRegion `json:"key"`
+	Value      *keyValueRegion `json:"value"`
+	Confidence float64         `json:"confidence"`
+}
+
+// keyValueRegion is one half of a pair: the text and where it was.
+type keyValueRegion struct {
+	Content         string           `json:"content"`
+	BoundingRegions []boundingRegion `json:"boundingRegions"`
+	Spans           []span           `json:"spans"`
 }
 
 type resultPage struct {
@@ -369,7 +461,18 @@ type lineDraft struct {
 // page that was recognised rather than from the response, because a single page
 // sent on its own comes back numbered 1 whatever page of the caller's document
 // it was.
-func normalise(res *analyzeResult, p *resultPage, number int, sp space, raw json.RawMessage) *ovrin.Recognition {
+//
+// structure says whether the model that ran reports tables and key-value pairs.
+// It decides whether [ovrin.Recognition.Layout] is populated at all, and the
+// distinction is load-bearing: nil is a model that does not look, and an empty
+// Layout is one that looked and found nothing.
+//
+// An error means the structure the service reported is not coherent — a cell
+// outside its table, two cells in one position — which is a response nothing
+// can be done with. It is refused rather than half-mapped, because a layout
+// that quietly contradicts itself is worse than one that is not there
+// (rule §6.1).
+func normalise(res *analyzeResult, p *resultPage, number int, sp space, raw json.RawMessage, structure bool) (*ovrin.Recognition, error) {
 	pageConf, derived := meanConfidence(p.Words)
 
 	rec := &ovrin.Recognition{
@@ -464,7 +567,19 @@ func normalise(res *analyzeResult, p *resultPage, number int, sp space, raw json
 		PageConfidenceDerived:  derived,
 		Unit:                   p.Unit,
 	}
-	return rec
+
+	if structure {
+		layout := pageLayout(res, p, number, sp)
+		// Checked here rather than left to a caller: this is the one place
+		// that knows the layout was built by mapping and not by the caller, so
+		// a failure is the response's fault and can be reported as such. The
+		// error names indexes and never a cell's text (rule §2.5).
+		if err := layout.Check(); err != nil {
+			return nil, err
+		}
+		rec.Layout = layout
+	}
+	return rec, nil
 }
 
 // geometricLine returns the line whose box holds a word's centre, or -1.
@@ -591,4 +706,216 @@ func readingOrder(boxes []ovrin.Rect, height float64) []int {
 		return ra.MinX < rb.MinX
 	})
 	return idx
+}
+
+// ---------------------------------------------------------------------------
+// Structure
+// ---------------------------------------------------------------------------
+
+// reportsStructure says whether a model returns tables and key-value pairs.
+//
+// It is the question [ovrin.Recognition.Layout] being a pointer exists to
+// answer, and it has to be asked of the model rather than of the response: a
+// layout analysis of a page with no table in it and a read analysis of the same
+// page both arrive with no tables, and the caller's next decision — read this
+// page as a table or as prose — depends on telling them apart (ADR-0009).
+//
+// prebuilt-read is the one model documented to return text and nothing else.
+// Layout, the document-shaped prebuilts and custom models all report structure,
+// so anything that is not the read model is assumed to look. Assuming the other
+// way would mean a caller who asked for prebuilt-layout got nil, which reads as
+// "nobody looked" when somebody did.
+func reportsStructure(model string) bool {
+	return model != "" && model != DefaultModel
+}
+
+// pageLayout is the structure the service reported on one page, in ovrin's
+// shape.
+//
+// It is never nil. A model that reports structure and found none on this page
+// returns an empty Layout, because that is the fact: it looked. The decision to
+// call this at all is [reportsStructure]'s.
+//
+// Structure is stated once for the whole result with each element naming its
+// pages, so this selects the elements belonging to this page rather than
+// converting a page-shaped part of the response. number is stamped on what it
+// keeps, for the same reason the words carry it: a page sent on its own comes
+// back numbered 1 whatever page of the caller's document it was.
+func pageLayout(res *analyzeResult, p *resultPage, number int, sp space) *ovrin.Layout {
+	key := p.PageNumber
+	if key <= 0 {
+		key = number
+	}
+	home := firstPageNumber(res, key)
+
+	out := &ovrin.Layout{}
+	for i := range res.Tables {
+		t := &res.Tables[i]
+		if regionPage(t.BoundingRegions, home) != key {
+			continue
+		}
+		out.Tables = append(out.Tables, ovrin.Table{
+			Page: number,
+			Box:  regionBox(t.BoundingRegions, key, sp),
+			// The service's own counts, not len(Cells): a table whose last row
+			// is empty still has that row, and deriving the size would lose it.
+			Rows:    t.RowCount,
+			Columns: t.ColumnCount,
+			Cells:   tableCells(t.Cells, key, sp),
+			// The service publishes no confidence for a table, and zero says
+			// so. A fabricated 1.0 would tell the confidence engine the table
+			// was read perfectly (rule §6.1).
+		})
+	}
+
+	for i := range res.KeyValuePairs {
+		kv := &res.KeyValuePairs[i]
+		if kv.Key == nil {
+			// A pair with no key is not a label and a value; there is nothing
+			// for it to say.
+			continue
+		}
+		page := regionPage(kv.Key.BoundingRegions, home)
+		if page != key {
+			continue
+		}
+		pair := ovrin.Pair{
+			Page: number,
+			Key:  keyValueRegionOf(kv.Key, key, sp),
+			// Confidence is the service's own for the association. It is not
+			// spread onto the two regions: it is about the pairing, and the
+			// service reports nothing about how well either half was read.
+			Confidence: kv.Confidence,
+		}
+		if kv.Value != nil {
+			pair.Value = keyValueRegionOf(kv.Value, key, sp)
+		}
+		out.Pairs = append(out.Pairs, pair)
+	}
+
+	// Reading order is ovrin's convention rather than the service's, and Order
+	// is where that convention lives, so that this adapter maps and does not
+	// decide (rule §6.2). It also fills the box of a table the service gave no
+	// geometry for, from the union of its cells.
+	out.Order()
+	return out
+}
+
+// tableCells converts the cells of one table that sit on the given page.
+//
+// Every cell is kept, including the ones on another page of a table that
+// crosses a page break: the grid is the table's and dropping part of it would
+// make a row silently short. Only the geometry is page-specific, and a cell on
+// another page has none here.
+func tableCells(cells []tableCell, page int, sp space) []ovrin.Cell {
+	if len(cells) == 0 {
+		return nil
+	}
+	out := make([]ovrin.Cell, 0, len(cells))
+	for i := range cells {
+		c := &cells[i]
+		out = append(out, ovrin.Cell{
+			Row:    c.RowIndex,
+			Column: c.ColumnIndex,
+			// Passed through unrepaired: the service omits a span of one, which
+			// decodes to zero, and zero already means one cell on [ovrin.Cell].
+			RowSpan:    c.RowSpan,
+			ColumnSpan: c.ColumnSpan,
+			Kind:       cellKind(c.Kind),
+			Text:       c.Content,
+			Box:        regionBox(c.BoundingRegions, page, sp),
+		})
+	}
+	return out
+}
+
+// cellKind maps the service's cell label onto ovrin's closed set.
+//
+// Three of the five map exactly. The other two do not, and neither loss is
+// silent:
+//
+//   - stubHead is the corner cell sitting above a column of row headers. It
+//     labels the column beneath it, so it is reported as a column header. The
+//     alternative — calling it a row header — would attach it to a row it does
+//     not describe, and a wrong heading is worse than a coarse one.
+//   - description is a cell describing the table rather than heading anything.
+//     It carries content and labels nothing, which is what CellData says; it is
+//     not CellUnknown, because the service did classify it.
+//
+// A kind this package has not seen becomes CellUnknown, which is "the provider
+// did not say" rather than "this is data" — collapsing those two would make a
+// header row silently wrong instead of visibly absent.
+func cellKind(k string) ovrin.CellKind {
+	switch k {
+	case kindColumnHeader, kindStubHead:
+		return ovrin.CellColumnHeader
+	case kindRowHeader:
+		return ovrin.CellRowHeader
+	case kindContent, kindDescription:
+		return ovrin.CellData
+	default:
+		return ovrin.CellUnknown
+	}
+}
+
+// keyValueRegionOf converts one half of a pair.
+func keyValueRegionOf(r *keyValueRegion, page int, sp space) ovrin.Region {
+	return ovrin.Region{
+		Text: r.Content,
+		Box:  regionBox(r.BoundingRegions, page, sp),
+		// The service reports no confidence for either half of a pair, only for
+		// the association. Zero says so; anything else would be invented.
+	}
+}
+
+// regionPage returns the page a structural element is reported on.
+//
+// The first region that names a page wins: an element crossing a page break is
+// reported on the page it starts on, which is the only choice that does not
+// depend on the order the service happened to list its regions in. An element
+// with no region at all falls back, because dropping it would lose structure
+// the caller paid to have detected (rule §6.1).
+func regionPage(regions []boundingRegion, fallback int) int {
+	for _, r := range regions {
+		if r.PageNumber > 0 {
+			return r.PageNumber
+		}
+	}
+	return fallback
+}
+
+// regionBox returns an element's geometry on one page, converted to points.
+//
+// A zero rectangle means the element has no geometry on this page — either the
+// service reported none, or this is the far side of something that crosses a
+// page break. Zero means unknown throughout ovrin, never "at the origin".
+func regionBox(regions []boundingRegion, page int, sp space) ovrin.Rect {
+	for _, r := range regions {
+		if r.PageNumber != page {
+			continue
+		}
+		if box, ok := sp.rect(r.Polygon); ok {
+			return box
+		}
+	}
+	return ovrin.Rect{}
+}
+
+// firstPageNumber is the lowest page number the result reports, and is where an
+// element that names no page is attributed.
+//
+// It is a minimum rather than res.Pages[0] because the service does not promise
+// the pages arrive in order, and a fallback that depended on arrival order
+// would move a table between pages for no reason the caller could see.
+func firstPageNumber(res *analyzeResult, fallback int) int {
+	best := 0
+	for i := range res.Pages {
+		if n := res.Pages[i].PageNumber; n > 0 && (best == 0 || n < best) {
+			best = n
+		}
+	}
+	if best == 0 {
+		return fallback
+	}
+	return best
 }

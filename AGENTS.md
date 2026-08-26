@@ -143,7 +143,7 @@ ovrin/                     module github.com/BAGOMBEKA-JOB-DEV/ovrin
 │   ├── prompt/            instruction construction — SECURITY BOUNDARY
 │   ├── retry/             the one schema-invalid follow-up request
 │   ├── normalise/         offset-preserving normalisation
-│   ├── layout/  schema/  jsonschema/  img/
+│   ├── schema/  jsonschema/  img/
 │   ├── validate/  ground/  compare/
 │   ├── adaptertest/       the shared contract suite
 │   └── sandbox/

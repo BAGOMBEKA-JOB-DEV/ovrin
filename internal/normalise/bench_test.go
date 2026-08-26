@@ -125,6 +125,10 @@ func BenchmarkNormalise(b *testing.B) {
 	for _, c := range cases {
 		c := c
 		b.Run(c.name, func(b *testing.B) {
+			// Throughput is reported over the normalised text rather than over
+			// the input, because the output is what every later stage reads
+			// and what the mapping is sized against.
+			b.SetBytes(int64(len(Normalise(c.in).Text)))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -147,6 +151,7 @@ func BenchmarkNormaliseDocument(b *testing.B) {
 			for n := 1; n <= pages; n++ {
 				in.Pages = append(in.Pages, benchLaidPage(n, 2, 30))
 			}
+			b.SetBytes(int64(len(Normalise(in).Text)))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

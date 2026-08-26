@@ -59,26 +59,32 @@ extraction.
 | `ovrin.schema` | schema reflection (absent when cached) |
 | `ovrin.prompt` | instruction construction |
 | `ovrin.generate` | the model call |
-| `ovrin.validate` | reserved — **no trace shows this today** |
-| `ovrin.ground` | reserved — **no trace shows this today** |
-| `ovrin.score` | reserved — **no trace shows this today** |
+| `ovrin.validate` | rule checking across every field |
+| `ovrin.ground` | locating each value back in the source |
+| `ovrin.score` | reserved — see below |
 
 Span names match the `Op` constants ([ADR-0027](adr/0027-twelve-sentinels-and-one-op-vocabulary.md))
 and the stage names in [`pipeline.md`](pipeline.md), so one vocabulary covers
 traces, errors and the documentation.
 
-**Three of those names are reserved rather than live.** Validation, grounding
-and scoring all run while the `Result` is being assembled, and the core emits
-no event for the first two — so nothing exists for the `otel` module to turn
-into a span. Scoring does emit one, but it carries the wall time of the whole
-`Extract` call along with the aggregate confidence and the review flag;
-labelling that `ovrin.score` would report the entire extraction as time spent
-scoring, so the module makes it the root `ovrin.extract` span instead.
+**Validation and grounding do not have a pass of their own.** They run per
+field, interleaved, while the `Result` is assembled — a field is converted,
+checked against its rules, then looked for in the source, before the next
+field is touched. The two events are emitted once, after the walk, and their
+durations therefore overlap and both cover the same span of wall time. Read
+them as "this stage happened and here is roughly what it cost", not as two
+disjoint slices of a timeline.
 
-The three names stay here, and in the module's own span table, because the `Op`
-vocabulary is the promise and a core that later emits these events should not
-have to invent names for them. But a dashboard must not wait on a span that
-never arrives.
+They are emitted at all because the `Op` vocabulary is one vocabulary. An `Op`
+that can appear on an `Error` and never on an `Event` makes a trace and a
+failure describe the same extraction in two different languages, and a reader
+comparing them has to know which names are real.
+
+**`ovrin.score` is the exception.** Scoring does emit an event, but it carries
+the wall time of the whole `Extract` call along with the aggregate confidence
+and the review flag; labelling that `ovrin.score` would report the entire
+extraction as time spent scoring, so the module makes it the root
+`ovrin.extract` span instead.
 
 ### Span attributes
 
