@@ -386,6 +386,8 @@ type FieldEvidence struct {
     Grounding  float64
     Provenance []Provenance
     Candidates []Candidate
+    Agreement  *float64      // nil when only one reading ran
+    AgreementNote string
     Validation []RuleResult
     Suspicious bool
 }

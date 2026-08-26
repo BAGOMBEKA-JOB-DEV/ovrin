@@ -54,6 +54,15 @@ type Recognition struct {
 	// Providers that detect tables or key-value pairs expose them here; ovrin
 	// itself uses words and lines.
 	Raw any
+
+	// Usage is what recognising this page consumed.
+	//
+	// OCR providers bill per page rather than per token, and without a place
+	// to report that the cost of a reading cannot reach [Metadata.Usage] or a
+	// metric at all: the seam would be the one stage of the pipeline whose
+	// spend is invisible. A provider that does not meter a request leaves this
+	// zero rather than guessing a page count.
+	Usage Usage
 }
 
 // Word is one recognised word.

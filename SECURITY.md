@@ -33,6 +33,39 @@ Credit is given in the advisory unless you would rather it were not.
 Pre-v1, only the latest release of each module receives fixes. There are no
 backports. See [ADR-0024](docs/adr/0024-versioning-and-stability.md).
 
+### Which Go toolchain you need
+
+`go.mod` declares `go 1.22`, which is a *language* floor
+([ADR-0003](docs/adr/0003-go-floor-and-generics.md)). It is not a statement
+that 1.22.0 is safe to run ovrin on.
+
+Ovrin hands attacker-controlled bytes to `archive/zip`, `encoding/xml`,
+`compress/flate` and `image/*`. Defects in those are defects in ovrin's
+parsing path, and the only fix for them is a newer toolchain — ovrin cannot
+patch the standard library. **Build with the latest patch release of whichever
+minor version you use.** For 1.22 that currently means **1.22.4 or newer**,
+which carries the fix for `GO-2024-2888`, a panic on a crafted zip central
+directory reachable from any DOCX, XLSX or PDF ovrin accepts.
+
+Run `govulncheck ./...` against your own build. It reports the toolchain you
+are actually using, which is the only thing that matters here; ovrin's CI
+result cannot tell you about yours.
+
+Two consequences worth stating plainly:
+
+- A stdlib advisory whose fix landed only in a *later minor* than the one you
+  run cannot be obtained without upgrading that minor. `GO-2026-6088`
+  (recursion depth in `encoding/xml`, fixed in 1.25.13) is the current example.
+  We checked this one: every XML reader in the repository uses
+  `xml.Decoder.Token` exclusively — no `Unmarshal`, no `DecodeElement`, and
+  `Decoder.Skip` is deliberately replaced by an iterative equivalent — and
+  `Token` maintains its element stack on the heap rather than recursing, which
+  we verified holds at two million levels of nesting. Ovrin's own recursive
+  walkers are separately bounded by `WithMaxDepth`, default 64. So that
+  advisory does not appear to reach ovrin. We will say so if that changes.
+- A toolchain vulnerability reachable through ovrin is in scope for a report
+  even though the fix is not ours to ship, because the reachability may be.
+
 ## What is in scope
 
 Ovrin's threat model is documented in full at

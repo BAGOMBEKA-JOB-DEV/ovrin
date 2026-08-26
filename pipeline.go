@@ -1,16 +1,21 @@
 package ovrin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
+	"io/fs"
 	"time"
 
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/detect"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/img"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/jsonschema"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/normalise"
+	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/office"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/pdf"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/prompt"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
@@ -34,6 +39,16 @@ type reading struct {
 	text     *normalise.Result    // nil on a vision-only reading
 	kinds    []Reading            // which reading served each page
 	provider string               // the OCR provider, if one served
+
+	// unread are pages no reading could serve. They are reported rather than
+	// left silently blank: a page ovrin could not read is data it dropped, and
+	// dropping data silently is the one thing an adapter or a stage may never
+	// do (docs/rules.md §6.1).
+	unread []int
+
+	// notes are things the caller should know that are not failures — a part
+	// deliberately not extracted, hidden text found and kept.
+	notes []string
 }
 
 // run executes the nine stages and returns everything Extract needs to build a
@@ -53,6 +68,26 @@ func run(ctx context.Context, cfg *config, src Source, sch *schema.Schema) (*out
 	rd, err := stageAcquire(ctx, cfg, data, doc, &meta)
 	if err != nil {
 		return nil, err
+	}
+
+	// ModeBoth takes a second, independent reading. Two readings fail in
+	// uncorrelated ways — OCR misreads glyphs, a model misassigns fields — so
+	// when they agree they are probably both right, and when they differ at
+	// least one is definitely wrong and we know which field
+	// (ADR-0014). It roughly doubles cost, which is why it is asked for
+	// rather than assumed.
+	var second *reading
+	if cfg.reading == ModeBoth {
+		second, err = stageSecondReading(ctx, cfg, data, doc, rd, &meta)
+		if err != nil {
+			// A second reading that cannot be taken is not a failure: the
+			// first one stands, and the agreement signal is simply absent
+			// rather than zero. Refusing the whole extraction because a
+			// second opinion was unavailable would be worse than the single
+			// opinion the caller would otherwise have had.
+			cfg.emit(ctx, Event{Op: OpAcquire, Err: err})
+			second = nil
+		}
 	}
 	meta.Readings = rd.kinds
 	meta.Pages = rd.doc.Pages
@@ -89,6 +124,19 @@ func run(ctx context.Context, cfg *config, src Source, sch *schema.Schema) (*out
 		}
 	}
 
+	// The second reading goes through the same prompt, schema and model. Only
+	// the content differs, which is the point: two readings of one document,
+	// compared field by field.
+	var secondObject map[string]any
+	if second != nil {
+		if obj, err := generateFrom(ctx, cfg, sch, jsonSchema, second, &meta); err == nil {
+			secondObject = obj
+			meta.Readings = append(meta.Readings, second.kinds...)
+		} else {
+			cfg.emit(ctx, Event{Op: OpGenerate, Err: err})
+		}
+	}
+
 	meta.Kind = rd.doc.Kind
 	meta.Duration = time.Since(started)
 
@@ -98,7 +146,16 @@ func run(ctx context.Context, cfg *config, src Source, sch *schema.Schema) (*out
 		reading:  primaryReading(rd.kinds),
 		provider: rd.provider,
 		findings: findingsOf(rd.text),
-		meta:     meta,
+		unread:   rd.unread,
+		notes:    rd.notes,
+		second:   secondObject,
+		secondReading: func() Reading {
+			if second == nil {
+				return ReadingUnknown
+			}
+			return primaryReading(second.kinds)
+		}(),
+		meta: meta,
 	}, nil
 }
 
@@ -111,7 +168,15 @@ type outcome struct {
 	reading  Reading
 	provider string
 	findings []normalise.Finding
-	meta     Metadata
+	unread   []int
+	notes    []string
+
+	// second is the reply from a second, independent reading, and is nil
+	// unless ModeBoth was asked for. secondReading names which reading it was.
+	second        map[string]any
+	secondReading Reading
+
+	meta Metadata
 }
 
 func stageDetect(ctx context.Context, cfg *config, src Source, meta *Metadata) ([]byte, Document, error) {
@@ -168,6 +233,13 @@ func stageAcquire(ctx context.Context, cfg *config, data []byte, doc Document, m
 		if !errors.Is(err, ErrNoContent) || cfg.reading == ModeText {
 			return nil, err
 		}
+	}
+
+	// DOCX, XLSX and CSV carry their own text. Like a text-layer PDF they take
+	// the exact, nearly-free path: no OCR, no renderer, no model call to
+	// acquire content.
+	if doc.Kind == KindDOCX || doc.Kind == KindXLSX || doc.Kind == KindCSV {
+		return acquireByOffice(ctx, cfg, doc, start)
 	}
 
 	switch doc.Kind {
@@ -256,6 +328,70 @@ func stageAcquire(ctx context.Context, cfg *config, data []byte, doc Document, m
 	}, nil
 }
 
+// acquireByOffice reads a DOCX, XLSX or CSV.
+//
+// These formats have no page geometry — a DOCX has no fixed layout until it is
+// rendered, and a spreadsheet cell has a grid position rather than a point on
+// paper — so internal/office reports zero boxes and internal/normalise abstains
+// from the checks that need them rather than running them against a guess. The
+// cost is real and worth stating: a value extracted from one of these cannot
+// be highlighted on a rendered page, only located in the text.
+func acquireByOffice(ctx context.Context, cfg *config, doc Document, start time.Time) (*reading, error) {
+	lim := limitsOf(cfg)
+	d, err := office.Extract(doc.Data, detect.Kind(doc.Kind), lim,
+		detect.NewCounter(detect.LimitDecompressedBytes, lim.MaxDecompressedBytes))
+	if err != nil {
+		cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Err: err})
+		return nil, classify(OpAcquire, "", err)
+	}
+	if len(d.Pages) > cfg.maxPages {
+		return nil, &Error{Op: OpAcquire, Kind: ErrLimitExceeded,
+			Message: "page count exceeds the limit, raise with WithMaxPages"}
+	}
+
+	nStart := time.Now()
+	res := normalise.Normalise(normalise.Input{Pages: d.Pages})
+	cfg.emit(ctx, Event{Op: OpNormalise, Duration: time.Since(nStart), Bytes: int64(len(res.Text))})
+
+	if int64(len(res.Text)) > cfg.maxTextBytes {
+		return nil, &Error{Op: OpNormalise, Kind: ErrLimitExceeded,
+			Message: "extracted text exceeds the limit, raise with WithMaxTextBytes"}
+	}
+
+	kinds := make([]Reading, len(d.Pages))
+	content := make([]prompt.PageContent, 0, len(d.Pages))
+	for i := range d.Pages {
+		kinds[i] = ReadingText
+		content = append(content, prompt.PageContent{
+			Number:  i + 1,
+			Reading: prompt.Reading(ReadingText),
+			Text:    pageText(res, i),
+		})
+	}
+	cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Pages: len(d.Pages)})
+
+	rd := &reading{
+		doc:   Document{Kind: doc.Kind, Pages: len(d.Pages), Size: doc.Size, Data: doc.Data},
+		kinds: kinds,
+		text:  res,
+		pages: content,
+	}
+
+	// Parts deliberately not extracted, and hidden runs, are reported rather
+	// than silently absent (docs/rules.md §6.1). Hidden text in particular is
+	// invisible to a reviewer and visible to the model, which is the shape of
+	// an injection.
+	for _, part := range d.Skipped {
+		rd.notes = append(rd.notes, fmt.Sprintf("%s was not extracted", part))
+	}
+	if d.HiddenRuns > 0 {
+		rd.notes = append(rd.notes, fmt.Sprintf(
+			"%d run(s) are marked hidden: text a reviewer cannot see and the model can",
+			d.HiddenRuns))
+	}
+	return rd, nil
+}
+
 // acquireByTextLayer reads a PDF's own characters.
 //
 // It returns an error wrapping ErrNoContent when the text layer is missing or
@@ -286,6 +422,7 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 	}
 
 	pages := make([]normalise.Page, 0, n)
+	var unusable []int
 	usable := 0
 	for i := 1; i <= n; i++ {
 		if err := ctx.Err(); err != nil {
@@ -300,9 +437,14 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 		// right shape and the wrong letters, and passing that on would poison
 		// every stage after it (ADR-0011).
 		if !page.Usable(th) {
+			// Contributing an empty page here made a scanned appendix bound
+			// onto a digital contract silently blank: the model never saw it
+			// and nothing said so. The page is recorded as needing another
+			// reading instead (docs/pipeline.md stage 2).
 			pages = append(pages, normalise.Page{
 				Number: i, Width: page.Content.Width, Height: page.Content.Height,
 			})
+			unusable = append(unusable, i)
 			continue
 		}
 		usable++
@@ -323,12 +465,39 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 			Message: "extracted text exceeds the limit, raise with WithMaxTextBytes"}
 	}
 
+	// A page the text layer could not serve is read another way, if there is
+	// another way. Acquisition is per page, not per document: one file can
+	// carry a digital contract and a scanned appendix, and taking one path for
+	// the whole of it loses whichever half it did not choose.
+	byPage := map[int]prompt.PageContent{}
+	var unread []int
+	for _, n := range unusable {
+		c, rd, err := acquirePage(ctx, cfg, doc, n)
+		if err != nil {
+			// The rest of the document is readable, so a page that cannot be
+			// filled is reported and the extraction continues. Refusing the
+			// whole document because one appendix page needs a renderer
+			// nobody configured would discard everything that did work.
+			cfg.emit(ctx, Event{Op: OpAcquire, Page: n, Duration: time.Since(start), Err: err})
+			unread = append(unread, n)
+			continue
+		}
+		byPage[n] = c
+		_ = rd
+	}
+
 	kinds := make([]Reading, len(pages))
 	content := make([]prompt.PageContent, 0, len(pages))
 	for i := range pages {
+		n := i + 1
+		if c, ok := byPage[n]; ok {
+			kinds[i] = Reading(c.Reading)
+			content = append(content, c)
+			continue
+		}
 		kinds[i] = ReadingText
 		content = append(content, prompt.PageContent{
-			Number:  i + 1,
+			Number:  n,
 			Reading: prompt.Reading(ReadingText),
 			Text:    pageText(res, i),
 		})
@@ -336,11 +505,205 @@ func acquireByTextLayer(ctx context.Context, cfg *config, doc Document, meta *Me
 	cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Pages: len(pages)})
 
 	return &reading{
-		doc:   Document{Kind: doc.Kind, Pages: len(pages), Size: doc.Size, Data: doc.Data},
-		kinds: kinds,
-		text:  res,
-		pages: content,
+		doc:    Document{Kind: doc.Kind, Pages: len(pages), Size: doc.Size, Data: doc.Data},
+		kinds:  kinds,
+		text:   res,
+		pages:  content,
+		unread: unread,
 	}, nil
+}
+
+// stageSecondReading takes an independent second reading of the same document.
+//
+// It deliberately picks a reading the first one did not use: comparing two OCR
+// passes over the same pixels would agree with itself, which is agreement that
+// proves nothing. Text against vision, or OCR against vision, fail in ways that
+// have nothing to do with each other, and that independence is the whole
+// source of the signal (ADR-0014).
+func stageSecondReading(ctx context.Context, cfg *config, data []byte, doc Document, first *reading, meta *Metadata) (*reading, error) {
+	start := time.Now()
+	took := primaryReading(first.kinds)
+
+	// Vision is the reading almost nothing else uses, so it is the usual
+	// second opinion. When the first reading was already vision, OCR is the
+	// alternative, and without an OCR provider there is no second reading to
+	// take.
+	if took == ReadingVision {
+		if cfg.ocr == nil {
+			return nil, &Error{Op: OpAcquire, Kind: ErrNoProvider,
+				Message: "a second reading needs an OCR provider; configure one with WithOCR"}
+		}
+		alt := *cfg
+		alt.reading = ModeOCR
+		return stageAcquire(ctx, &alt, data, doc, meta)
+	}
+
+	pages, err := visionPages(ctx, cfg, doc, first)
+	if err != nil {
+		return nil, err
+	}
+	cfg.emit(ctx, Event{Op: OpAcquire, Duration: time.Since(start), Pages: len(pages)})
+
+	kinds := make([]Reading, len(pages))
+	for i := range kinds {
+		kinds[i] = ReadingVision
+	}
+	return &reading{doc: first.doc, kinds: kinds, pages: pages}, nil
+}
+
+// visionPages renders each page so a vision model can read it.
+func visionPages(ctx context.Context, cfg *config, doc Document, first *reading) ([]prompt.PageContent, error) {
+	// An image source is already an image: it needs no renderer, and sending
+	// the original bytes is better than rendering our own copy of them.
+	if doc.Kind != KindPDF {
+		return []prompt.PageContent{{
+			Number:    1,
+			Reading:   prompt.Reading(ReadingVision),
+			Image:     doc.Data,
+			MediaType: mediaTypeOf(doc.Kind),
+		}}, nil
+	}
+	if cfg.renderer == nil {
+		return nil, &Error{Op: OpAcquire, Kind: ErrNoProvider,
+			Message: "a vision reading of a PDF needs a renderer; configure one with WithRenderer"}
+	}
+
+	n := len(first.pages)
+	if n == 0 {
+		n = 1
+	}
+	out := make([]prompt.PageContent, 0, n)
+	for i := 1; i <= n; i++ {
+		img, err := cfg.renderer.Render(ctx, doc, i, renderDPI)
+		if err != nil {
+			return nil, classify(OpRender, "", err)
+		}
+		b, err := encodePNG(img)
+		if err != nil {
+			return nil, &Error{Op: OpRender, Page: i, Kind: ErrInternal,
+				Message: "the rendered page could not be encoded"}
+		}
+		out = append(out, prompt.PageContent{
+			Number: i, Reading: prompt.Reading(ReadingVision),
+			Image: b, MediaType: "image/png",
+		})
+	}
+	return out, nil
+}
+
+// generateFrom runs the prompt and model stages over one reading's content.
+func generateFrom(ctx context.Context, cfg *config, sch *schema.Schema, jsonSchema []byte, rd *reading, meta *Metadata) (map[string]any, error) {
+	req, err := stagePrompt(ctx, cfg, sch, jsonSchema, rd)
+	if err != nil {
+		return nil, err
+	}
+	raw, usage, err := stageGenerate(ctx, cfg, req, meta)
+	if err != nil {
+		return nil, err
+	}
+	meta.Usage.InputTokens += usage.InputTokens
+	meta.Usage.OutputTokens += usage.OutputTokens
+	meta.Usage.PageUnits += usage.PageUnits
+
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, &Error{Op: OpGenerate, Kind: ErrBadResponse,
+			Message: "the reply is not a JSON object"}
+	}
+	return obj, nil
+}
+
+// acquirePage reads one page of a document the text layer could not serve.
+//
+// It is the per-page half of stage 2: rasterise, then OCR, then vision, taking
+// the first that can serve this page. The order is the same as for a whole
+// document and for the same reason — OCR yields text, and text is what
+// grounding needs, so a value read this way can still be checked against the
+// document it came from.
+func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prompt.PageContent, Reading, error) {
+	if cfg.renderer == nil {
+		return prompt.PageContent{}, ReadingUnknown, &Error{
+			Op:   OpAcquire,
+			Page: page,
+			Kind: ErrNoProvider,
+			Message: "this page has no usable text layer, and reading it needs a " +
+				"renderer to rasterise it — configure one with WithRenderer",
+		}
+	}
+
+	start := time.Now()
+	img, err := cfg.renderer.Render(ctx, doc, page, renderDPI)
+	cfg.emit(ctx, Event{Op: OpRender, Page: page, Duration: time.Since(start), Err: err})
+	if err != nil {
+		return prompt.PageContent{}, ReadingUnknown, classify(OpRender, "", err)
+	}
+
+	b := img.Bounds()
+	p := Page{
+		Number: page,
+		Image:  img,
+		Width:  float64(b.Dx()) * pointsPerInch / renderDPI,
+		Height: float64(b.Dy()) * pointsPerInch / renderDPI,
+		DPI:    renderDPI,
+	}
+
+	if cfg.ocr != nil {
+		oStart := time.Now()
+		rec, err := cfg.ocr.Recognise(ctx, p)
+		name := cfg.ocr.Name()
+		cfg.emit(ctx, Event{Op: OpOCR, Provider: name, Page: page, Duration: time.Since(oStart), Err: err})
+		if err != nil {
+			return prompt.PageContent{}, ReadingUnknown, classify(OpOCR, name, err)
+		}
+		res := normalise.Normalise(normalise.Input{
+			Pages: []normalise.Page{normalisePage(page, p.Width, p.Height, rec)},
+		})
+		return prompt.PageContent{
+			Number:  page,
+			Reading: prompt.Reading(ReadingOCR),
+			Text:    res.Text,
+		}, ReadingOCR, nil
+	}
+
+	// No OCR provider: the page image goes to the model. That reading produces
+	// no source text, so nothing read from it can be grounded — which is why
+	// it is the last choice rather than the first.
+	png, err := encodePNG(img)
+	if err != nil {
+		return prompt.PageContent{}, ReadingUnknown, &Error{
+			Op: OpAcquire, Page: page, Kind: ErrInternal,
+			Message: "the rendered page could not be encoded",
+		}
+	}
+	return prompt.PageContent{
+		Number:    page,
+		Reading:   prompt.Reading(ReadingVision),
+		Image:     png,
+		MediaType: "image/png",
+	}, ReadingVision, nil
+}
+
+// renderDPI is the resolution pages are rasterised at when the text layer
+// cannot serve them.
+//
+// 300 is what scanners produce and what OCR engines are tuned for. Lower loses
+// small print; higher costs memory and time for accuracy no engine uses.
+const renderDPI = 300
+
+// pointsPerInch is fixed by the typographic point, which is what page geometry
+// is expressed in throughout ovrin.
+const pointsPerInch = 72.0
+
+// encodePNG turns a rendered page into bytes an adapter can send.
+//
+// PNG rather than JPEG: a rasterised page is line art, where JPEG's artefacts
+// land exactly on the strokes an OCR engine reads.
+func encodePNG(m image.Image) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, m); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // acquireByDocumentOCR hands the whole document to a provider that rasterises
@@ -625,6 +988,13 @@ func classify(op Op, provider string, err error) error {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return (&Error{Op: op, Provider: provider, Kind: ErrUnavailable,
 			Message: "the context ended before the stage completed"}).WithCause(err)
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, fs.ErrPermission):
+		// A path that does not exist, or that we may not read, is the caller's
+		// to fix. Falling through to ErrInternal told them to file a bug
+		// against ovrin for their own typo — the exact misdirection ADR-0030
+		// warns ErrInternal must never become.
+		return (&Error{Op: op, Provider: provider, Kind: ErrNoContent,
+			Message: "the source could not be opened"}).WithCause(err)
 	case errors.Is(err, detect.ErrUnsupportedFormat), errors.Is(err, img.ErrUnsupportedFormat):
 		kind = ErrUnsupportedFormat
 	case errors.Is(err, detect.ErrLimitExceeded), errors.Is(err, img.ErrLimitExceeded):

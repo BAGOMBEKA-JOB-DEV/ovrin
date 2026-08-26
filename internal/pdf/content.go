@@ -79,6 +79,13 @@ type run struct {
 	text                   string
 	minX, minY, maxX, maxY float64
 	line                   int
+
+	// colour is the colour the run was painted in, and colourKnown says
+	// whether it is one this package worked out. Unknown is reported as no
+	// colour rather than as a default, because the only consumer compares it
+	// with the paper (internal/normalise, Word.Colour).
+	colour      colour
+	colourKnown bool
 }
 
 // textState is the part of the graphics state that survives BT and ET.
@@ -90,12 +97,63 @@ type textState struct {
 	hscale    float64
 	leading   float64
 	rise      float64
+
+	// render is the text rendering mode set by Tr. It decides whether a
+	// glyph is painted with the fill colour, the stroke colour, both or
+	// neither, which is the difference between reading the colour of the
+	// text and reading a colour nothing was drawn in.
+	render int
 }
 
 // gstate is the graphics state that q and Q save and restore.
+//
+// Colour is in here rather than beside it because that is where the
+// specification puts it, and because a q that saves the matrix but not the
+// colour would report the wrong colour for every word after the first Q — the
+// exact shape of bug that makes a background-colour detector untrustworthy.
 type gstate struct {
 	ctm matrix
 	ts  textState
+
+	// The non-stroking and stroking colours, and the spaces they are
+	// components of. A PDF page starts in DeviceGray at black.
+	fillSpace   *colourSpace
+	strokeSpace *colourSpace
+	fill        colour
+	stroke      colour
+	fillKnown   bool
+	strokeKnown bool
+
+	// clip is a box round the clipping region, and clipExact says whether the
+	// region is that box rather than something smaller inside it.
+	clip      rect
+	clipExact bool
+}
+
+// textColour returns the colour a glyph shown in this state is painted in.
+//
+// Mode 3 and mode 7 paint nothing at all — which is the searchable text layer
+// a scanner writes under a page image, present in a large share of real
+// documents — so they report no colour rather than an invisible one. Modes 2
+// and 6 paint the glyph twice, and are only hidden when both colours are
+// hidden, so they answer only when the two agree.
+func (g *gstate) textColour() (colour, bool) {
+	mode := g.ts.render
+	if mode < 0 || mode > 7 {
+		mode = 0
+	}
+	switch mode & 3 {
+	case 0:
+		return g.fill, g.fillKnown
+	case 1:
+		return g.stroke, g.strokeKnown
+	case 2:
+		if g.fillKnown && g.strokeKnown && g.fill == g.stroke {
+			return g.fill, true
+		}
+		return colour{}, false
+	}
+	return colour{}, false
 }
 
 // interp runs a content stream and collects positioned words.
@@ -115,31 +173,69 @@ type interp struct {
 	line int
 
 	// cur is the word being accumulated.
-	cur    strings.Builder
-	curBox [4]float64
-	curHas bool
-	lastY  float64
+	cur       strings.Builder
+	curBox    [4]float64
+	curHas    bool
+	curColour colour
+	curKnown  bool
+	lastY     float64
 
 	chars       int
 	replacement int
 	undecodable int
 
-	fonts map[Name]*font
+	fonts  map[Name]*font
+	spaces map[Name]*colourSpace
+
+	// page is the media box in user space, which is what a fill is measured
+	// against when deciding whether it painted the paper.
+	page rect
+
+	// The current path and whether a W is waiting for the operator that ends
+	// it.
+	path        pathState
+	pendingClip bool
+
+	// What has been worked out about the page's background: a colour taken
+	// from a full-page fill, a flag saying the page was painted by something
+	// whose colour could not be taken, and the area of the smaller such
+	// paint. See interp.background.
+	bg        colour
+	bgKnown   bool
+	bgUnknown bool
+	painted   float64
 
 	// err is the first limit failure. Extraction stops at it: a limit failure
 	// means an attacker is spending our memory and continuing spends more.
 	err error
 }
 
-// newInterp returns an interpreter for one page.
-func newInterp(d *Doc) *interp {
-	return &interp{
-		doc:   d,
-		gs:    gstate{ctm: identityMatrix, ts: textState{hscale: 1}},
-		tm:    identityMatrix,
-		tlm:   identityMatrix,
-		fonts: map[Name]*font{},
+// newInterp returns an interpreter for one page whose media box is page, in
+// user space.
+//
+// The initial graphics state is the specification's: DeviceGray at black, an
+// identity matrix, and a clip that is the page itself.
+func newInterp(d *Doc, page rect) *interp {
+	ip := &interp{
+		doc: d,
+		gs: gstate{
+			ctm:         identityMatrix,
+			ts:          textState{hscale: 1},
+			fillSpace:   graySpace,
+			strokeSpace: graySpace,
+			fillKnown:   true,
+			strokeKnown: true,
+			clip:        page,
+			clipExact:   true,
+		},
+		tm:     identityMatrix,
+		tlm:    identityMatrix,
+		fonts:  map[Name]*font{},
+		spaces: map[Name]*colourSpace{},
+		page:   page,
 	}
+	ip.resetPath()
+	return ip
 }
 
 // runContent interprets a content stream against a resource dictionary.
@@ -204,11 +300,14 @@ func num(ops []Object, fromEnd int) float64 {
 
 // do executes one operator.
 //
-// The set is exactly the text-showing, text-positioning and text-state
-// operators, plus the four that move the coordinate system underneath them.
-// Everything else — colour, paths, shading, images — is ignored rather than
-// implemented, which is the scope decision of ADR-0011 expressed as a switch
-// statement.
+// The set is the text-showing, text-positioning and text-state operators, the
+// four that move the coordinate system underneath them, and the colour and
+// path operators that say what colour the text and the paper are. Everything
+// else — shading detail, transparency, images beyond their extent — is ignored
+// rather than implemented, which is the scope decision of ADR-0011 expressed
+// as a switch statement. Colour is in scope because ADR-0017's fourth
+// mitigation is text painted in the colour of the page, and a reader that
+// cannot see colour cannot report it.
 func (ip *interp) do(op operator, ops []Object, res Dict, l *lexer, dp detect.Depth) {
 	switch op {
 	case "q":
@@ -227,6 +326,12 @@ func (ip *interp) do(op operator, ops []Object, res Dict, l *lexer, dp detect.De
 			m := matrix{num(ops, 5), num(ops, 4), num(ops, 3), num(ops, 2), num(ops, 1), num(ops, 0)}
 			ip.gs.ctm = m.mul(ip.gs.ctm)
 		}
+	case "g", "G", "rg", "RG", "k", "K":
+		ip.setDeviceColour(op, ops)
+	case "cs", "CS":
+		ip.setColourSpace(op, ops, res, dp)
+	case "sc", "scn", "SC", "SCN":
+		ip.setColourComponents(op, ops)
 	case "BT":
 		ip.flushWord()
 		ip.tm, ip.tlm = identityMatrix, identityMatrix
@@ -251,11 +356,14 @@ func (ip *interp) do(op operator, ops []Object, res Dict, l *lexer, dp detect.De
 		ip.gs.ts.leading = num(ops, 0)
 	case "Ts":
 		ip.gs.ts.rise = num(ops, 0)
-	case "Tr", "Tk":
-		// Rendering mode is read and ignored on purpose. Mode 3 is invisible
-		// text, which is exactly the text layer a scanner writes under a
-		// page image — dropping it would discard the searchable layer of
-		// every scanned PDF.
+	case "Tr":
+		// The mode is recorded but never used to drop text. Mode 3 is
+		// invisible text, which is exactly the text layer a scanner writes
+		// under a page image — dropping it would discard the searchable layer
+		// of every scanned PDF. What it decides is which colour the glyph is
+		// painted in, and whether it is painted at all; see
+		// [gstate.textColour].
+		ip.gs.ts.render = int(num(ops, 0))
 	case "Td":
 		ip.newline(num(ops, 1), num(ops, 0))
 	case "TD":
@@ -313,8 +421,110 @@ func (ip *interp) do(op operator, ops []Object, res Dict, l *lexer, dp detect.De
 		// An inline image's data is arbitrary bytes that would otherwise be
 		// lexed as syntax. Skipping to EI is not an optimisation; it is what
 		// keeps a binary blob from being read as a content stream.
+		//
+		// Its extent is still recorded: an inline image is drawn in the unit
+		// square like any other, and one covering the page is a background
+		// this package cannot name.
+		ip.opaquePaintSolid(ip.ctmBox(unitSquare))
 		skipInlineImage(l)
+	default:
+		// The path, painting, clipping and shading operators. They are in
+		// their own file because they are about the paper rather than the
+		// text; see internal/pdf/paint.go.
+		ip.paint(op, ops)
 	}
+}
+
+// setDeviceColour handles g, G, rg, RG, k and K, which set a colour and its
+// space in one operator.
+func (ip *interp) setDeviceColour(op operator, ops []Object) {
+	var cs *colourSpace
+	switch op {
+	case "g", "G":
+		cs = graySpace
+	case "rg", "RG":
+		cs = rgbSpace
+	default:
+		cs = cmykSpace
+	}
+	if len(ops) < cs.n {
+		// A truncated operator sets nothing. Filling the missing operands in
+		// with zeros would turn a malformed `rg` into black.
+		return
+	}
+	v := make([]float64, cs.n)
+	for i := range v {
+		v[i] = num(ops, cs.n-1-i)
+	}
+	c, ok := cs.colour(v)
+	if !ok {
+		return
+	}
+	if op == "G" || op == "RG" || op == "K" {
+		ip.gs.strokeSpace, ip.gs.stroke, ip.gs.strokeKnown = cs, c, true
+		return
+	}
+	ip.gs.fillSpace, ip.gs.fill, ip.gs.fillKnown = cs, c, true
+}
+
+// setColourSpace handles cs and CS, which select a space and reset the colour
+// to that space's initial value.
+//
+// The resolved space is cached by resource name for the page, as fonts are: a
+// content stream names /CS0 once per graphic and resolving an ICCBased space
+// walks the object graph every time.
+func (ip *interp) setColourSpace(op operator, ops []Object, res Dict, dp detect.Depth) {
+	n, ok := lastName(ops)
+	if !ok {
+		return
+	}
+	cs, cached := ip.spaces[n]
+	if !cached {
+		cs = ip.doc.colourSpaceFor(n, res, dp)
+		ip.spaces[n] = cs
+	}
+	c, known := cs.initial()
+	if op == "CS" {
+		ip.gs.strokeSpace, ip.gs.stroke, ip.gs.strokeKnown = cs, c, known
+		return
+	}
+	ip.gs.fillSpace, ip.gs.fill, ip.gs.fillKnown = cs, c, known
+}
+
+// setColourComponents handles sc, scn, SC and SCN, which set a colour in the
+// space already selected.
+//
+// A trailing name operand is a pattern, whose colour is whatever its own
+// content stream paints. That is not followed, so the colour becomes unknown —
+// which is the honest answer and the one that skips the check rather than
+// firing it wrongly.
+func (ip *interp) setColourComponents(op operator, ops []Object) {
+	stroking := op == "SC" || op == "SCN"
+	cs := ip.gs.fillSpace
+	if stroking {
+		cs = ip.gs.strokeSpace
+	}
+	c, known := colour{}, false
+	if !isPatternOperand(ops) {
+		v := make([]float64, 0, len(ops))
+		for _, o := range ops {
+			if f, ok := toFloat(o); ok {
+				v = append(v, f)
+			}
+		}
+		// The components are the last n operands, not the first: an operand
+		// stack carrying the residue of an operator this package ignored
+		// would otherwise contribute its numbers to the colour.
+		if cs != nil && cs.n > 0 && len(v) > cs.n {
+			v = v[len(v)-cs.n:]
+		}
+		c, known = cs.colour(v)
+	}
+	if stroking {
+		ip.gs.stroke, ip.gs.strokeKnown = c, known
+		return
+	}
+	ip.gs.fill, ip.gs.fillKnown = c, known
 }
 
 // lastString returns the last string operand.
@@ -325,6 +535,17 @@ func lastString(ops []Object) (String, bool) {
 		}
 	}
 	return nil, false
+}
+
+// isPatternOperand reports whether an scn operand list ends in a pattern name.
+// Only the last operand is looked at, because that is the only position the
+// specification puts one in and because an earlier name is residue.
+func isPatternOperand(ops []Object) bool {
+	if len(ops) == 0 {
+		return false
+	}
+	_, ok := ops[len(ops)-1].(Name)
+	return ok
 }
 
 // lastName returns the last name operand.
@@ -393,7 +614,16 @@ func (ip *interp) doXObject(n Name, res Dict, dp detect.Depth) {
 	if !ok {
 		return
 	}
-	if sub, ok := toName(ip.doc.resolve(st.Dict["Subtype"], dp)); !ok || sub != "Form" {
+	kind, _ := toName(ip.doc.resolve(st.Dict["Subtype"], dp))
+	if kind == "Image" {
+		// The image itself is never decoded — that is a renderer's work and
+		// most of these are in filters this package refuses. Its extent is
+		// cheap and is what says whether the paper underneath a word is
+		// something this package can name.
+		ip.opaquePaintSolid(ip.ctmBox(unitSquare))
+		return
+	}
+	if kind != "Form" {
 		return
 	}
 	data, err := st.Decode()
@@ -412,16 +642,23 @@ func (ip *interp) doXObject(n Name, res Dict, dp detect.Depth) {
 		ip.gs.ctm = fm.mul(ip.gs.ctm)
 	}
 	sub := res
-	savedFonts := ip.fonts
+	savedFonts, savedSpaces := ip.fonts, ip.spaces
+	savedPath, savedClipPending := ip.path, ip.pendingClip
 	if r, ok := ip.doc.resolve(st.Dict["Resources"], dp).(Dict); ok {
 		sub = r
-		// The font cache is keyed by resource name, so a form with its own
-		// resources must not read the page's cache: /F1 means something
-		// different in each.
+		// The font and colour-space caches are keyed by resource name, so a
+		// form with its own resources must not read the page's: /F1 and /CS0
+		// mean something different in each.
 		ip.fonts = map[Name]*font{}
+		ip.spaces = map[Name]*colourSpace{}
 	}
+	// A form begins with no current path, and whatever it leaves half-built
+	// does not become part of the caller's.
+	ip.resetPath()
+	ip.pendingClip = false
 	ip.runContent(data, sub, dp)
-	ip.fonts = savedFonts
+	ip.fonts, ip.spaces = savedFonts, savedSpaces
+	ip.path, ip.pendingClip = savedPath, savedClipPending
 	ip.gs, ip.tm, ip.tlm = saved, savedTm, savedTlm
 }
 
@@ -473,6 +710,9 @@ func (ip *interp) show(s String) {
 		f = ip.doc.loadFont(nil, ip.doc.lim.Depth())
 		ts.font = f
 	}
+	// The colour is fixed for the whole string: no operator inside a shown
+	// string can change it.
+	col, colKnown := ip.gs.textColour()
 	for _, g := range f.decode(s) {
 		if ip.err != nil {
 			return
@@ -501,7 +741,7 @@ func (ip *interp) show(s String) {
 				ip.undecodable++
 			}
 			ip.replacement += strings.Count(g.text, "�")
-			ip.addGlyph(g, trm)
+			ip.addGlyph(g, trm, col, colKnown)
 		}
 		ip.tm = matrix{1, 0, 0, 1, advance, 0}.mul(ip.tm)
 	}
@@ -515,7 +755,17 @@ func isSpaceText(s string) bool {
 }
 
 // addGlyph appends one glyph's characters and its box to the current word.
-func (ip *interp) addGlyph(g glyph, trm matrix) {
+//
+// col is the colour the glyph is painted in, and known says whether it is one
+// this package worked out.
+func (ip *interp) addGlyph(g glyph, trm matrix, col colour, known bool) {
+	// A change of colour ends the word. One run of text is one colour: an
+	// injected white phrase inside a black sentence is a separate run, and
+	// merging the two would give the whole thing one colour that is a
+	// property of neither.
+	if ip.curHas && (ip.curKnown != known || (known && ip.curColour != col)) {
+		ip.flushWord()
+	}
 	x0, y0 := trm.apply(0, glyphDescent)
 	x1, y1 := trm.apply(g.width, glyphAscent)
 	x2, y2 := trm.apply(0, glyphAscent)
@@ -533,6 +783,7 @@ func (ip *interp) addGlyph(g glyph, trm matrix) {
 	if !ip.curHas {
 		ip.curBox = [4]float64{minX, minY, maxX, maxY}
 		ip.curHas = true
+		ip.curColour, ip.curKnown = col, known
 	} else {
 		if minX < ip.curBox[0] {
 			ip.curBox[0] = minX
@@ -576,7 +827,9 @@ func (ip *interp) flushWord() {
 		text: text,
 		minX: ip.curBox[0], minY: ip.curBox[1],
 		maxX: ip.curBox[2], maxY: ip.curBox[3],
-		line: ip.line,
+		line:        ip.line,
+		colour:      ip.curColour,
+		colourKnown: ip.curKnown,
 	})
 }
 

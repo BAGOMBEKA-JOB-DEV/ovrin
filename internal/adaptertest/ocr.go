@@ -109,18 +109,17 @@ type OCRSuite struct {
 	// (docs/rules.md §6.2).
 	New func(baseURL string) ovrin.OCR
 
-	// NewDocument builds the same adapter as an [ovrin.DocumentOCR], able to
-	// read the document whose bytes are content.
+	// NewDocument builds the same adapter as an [ovrin.DocumentOCR].
 	//
-	// The bytes are a parameter because [ovrin.Document] carries a document's
-	// kind, page count and size but not its content, so how an adapter reaches
-	// the bytes is currently the adapter's own business — see the note in
-	// [OCR] on the document assertions.
+	// The bytes are not a parameter: [ovrin.Document.Data] carries them, and
+	// the suite puts [DocumentCanary] there. An adapter that reaches for the
+	// content anywhere else will fail the assertions, which is the point —
+	// every DocumentOCR must be able to work from its argument alone.
 	//
 	// Optional. Leaving it nil skips every DocumentOCR assertion, which is
 	// correct for a provider that cannot rasterise server-side and wrong for
 	// one that can.
-	NewDocument func(baseURL string, content []byte) ovrin.DocumentOCR
+	NewDocument func(baseURL string) ovrin.DocumentOCR
 
 	// APIKey is the credential New bakes in, so the suite can assert it never
 	// reaches an error and that the adapter actually sends the one it was
@@ -262,12 +261,9 @@ func (s OCRSuite) ocrDocument() ovrin.Document {
 //
 // # A note on the document assertions
 //
-// [ovrin.Document] carries a document's kind, page count and size but not its
-// content, so an [ovrin.DocumentOCR] cannot reach the bytes it is being asked
-// to recognise from its argument alone. Until the core closes that gap, the
-// suite hands the bytes to [OCRSuite.NewDocument] and lets each adapter say how
-// it takes them. The assertions themselves are unaffected: they are about what
-// comes back, not about how the bytes got in.
+// The document handed to an [ovrin.DocumentOCR] carries its own bytes in
+// [ovrin.Document.Data], so an adapter needs nothing beyond its argument. The
+// suite puts [DocumentCanary] there and asserts on what comes back.
 func OCR(t *testing.T, s OCRSuite) {
 	t.Helper()
 
@@ -612,7 +608,7 @@ func (s OCRSuite) serveRaw(t *testing.T, answer func(raw []byte) (int, string)) 
 func (s OCRSuite) serveDocument(t *testing.T, answer func(raw []byte) (int, string)) (ovrin.DocumentOCR, *ocrRecorder) {
 	t.Helper()
 	rec, url := s.serveRaw(t, answer)
-	return s.NewDocument(url, DocumentCanary), rec
+	return s.NewDocument(url), rec
 }
 
 // ---------------------------------------------------------------------------

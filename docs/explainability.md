@@ -146,8 +146,13 @@ Candidates
 agreement 0.00 → capped at 0.50
 
 Reasons
-  total — readings disagree: 25000.00 (ocr) vs 2500.00 (vision)
+  total — the readings disagree
 ```
+
+The reason names the field and the cause, never the amounts: it is the part
+most likely to be logged verbatim, and rule [§7.5](rules.md#7-untrusted-input)
+keeps document content out of a log line. Both values are on `Candidates`
+above, where a review interface reads them on purpose.
 
 `Value` holds the higher-confidence candidate so a caller who ignores all of
 this still gets the better answer. Nothing is discarded, and a reviewer sees

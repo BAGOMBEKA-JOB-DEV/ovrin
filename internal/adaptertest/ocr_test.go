@@ -115,10 +115,10 @@ func TestOCRSuiteAcceptsACompliantAdapter(t *testing.T) {
 	OCR(t, OCRSuite{
 		Name: "fakeocr",
 		New: func(baseURL string) ovrin.OCR {
-			return newFakeOCR(baseURL, fakeOCRAPIKey, nil)
+			return newFakeOCR(baseURL, fakeOCRAPIKey)
 		},
-		NewDocument: func(baseURL string, content []byte) ovrin.DocumentOCR {
-			return newFakeOCR(baseURL, fakeOCRAPIKey, content)
+		NewDocument: func(baseURL string) ovrin.DocumentOCR {
+			return newFakeOCR(baseURL, fakeOCRAPIKey)
 		},
 		APIKey:       fakeOCRAPIKey,
 		ProviderName: fakeOCRName,
@@ -432,7 +432,7 @@ func TestOCRFixtureGuards(t *testing.T) {
 		{
 			name: "a one-page document fixture is refused",
 			mutate: func(s *OCRSuite) {
-				s.NewDocument = func(string, []byte) ovrin.DocumentOCR { return nil }
+				s.NewDocument = func(string) ovrin.DocumentOCR { return nil }
 				s.DocumentBody = fakeOCRDocument
 				s.WantDocument = fakeOCRWantDocument[:1]
 			},
@@ -441,7 +441,7 @@ func TestOCRFixtureGuards(t *testing.T) {
 		{
 			name: "a document fixture that expects page 1 twice is refused",
 			mutate: func(s *OCRSuite) {
-				s.NewDocument = func(string, []byte) ovrin.DocumentOCR { return nil }
+				s.NewDocument = func(string) ovrin.DocumentOCR { return nil }
 				s.DocumentBody = fakeOCRDocument
 				pages := []OCRWant{fakeOCRWantDocument[0], fakeOCRWantDocument[0]}
 				s.WantDocument = pages

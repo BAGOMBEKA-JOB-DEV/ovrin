@@ -100,8 +100,18 @@ Rules for it:
   purchase order number", because the extractor must too.
 - **Values are what the document says**, not what is true. A document with an
   arithmetic error has ground truth matching the document.
-- **Ambiguity is recorded in `notes`** and the field is excluded from scoring.
-  Scoring a field two careful humans would read differently measures nothing.
+- **Ambiguity is excluded from scoring**, by naming the field in the meta file's
+  `exclude:` list. Scoring a field two careful readers would disagree about
+  measures the readers, not the extractor.
+
+  ```yaml
+  exclude:
+    - due          # 03/04/2026 — the document does not say which reading
+  ```
+
+  The reason belongs in `notes:` alongside it. Excluded fields are counted and
+  reported separately, so a corpus quietly excluding its hard cases is visible
+  rather than flattering.
 
 Ground truth is hand-labelled and will contain errors. When an apparent
 extraction failure turns out to be a labelling error, fix the label in its own

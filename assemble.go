@@ -1,9 +1,11 @@
 package ovrin
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
+	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/compare"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/ground"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/normalise"
 	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
@@ -21,6 +23,15 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 	var data T
 	dst := reflect.ValueOf(&data).Elem()
 
+	// The second reading's values, keyed the same way, so a field can find its
+	// counterpart. Built by walking the second reply through the same schema:
+	// the two replies answer the same questions and must be compared question
+	// by question, not position by position.
+	var alt validate.Fields
+	if out.second != nil {
+		alt = secondValues(sch, out.second, cfg)
+	}
+
 	v := validate.New(
 		validate.WithDateOrder(validate.DateOrder(cfg.dateOrder)),
 		validate.WithCrossFieldRules(internalRules(cfg.crossField)...),
@@ -32,10 +43,27 @@ func assemble[T any](out *outcome, sch *schema.Schema, cfg *config) *Result[T] {
 		v:       v,
 		fields:  make(map[string]FieldResult),
 		values:  make(validate.Fields),
+		alt:     alt,
 		suspect: pagesWithFindings(out.findings),
 	}
 	a.walk(sch.Fields, out.object, dst, "")
 	a.crossField()
+
+	// A page nothing could read is reported on the result, not only through a
+	// hook a caller may not be watching. Its fields are simply absent, and
+	// absent for a reason the caller is entitled to know (docs/rules.md §6.1).
+	//
+	// Collected before the Result is built: assigning Reasons first and
+	// appending afterwards copies the slice header, and the appends then land
+	// somewhere nobody reads.
+	for _, note := range out.notes {
+		a.reasons = append(a.reasons, ReviewReason{Why: note})
+	}
+	for _, n := range out.unread {
+		a.reasons = append(a.reasons, ReviewReason{
+			Why: fmt.Sprintf("page %d could not be read by any configured reading", n),
+		})
+	}
 
 	res := &Result[T]{
 		Data:     data,
@@ -55,6 +83,7 @@ type assembler struct {
 	v       *validate.Validator
 	fields  map[string]FieldResult
 	values  validate.Fields // converted values, for the cross-field rules
+	alt     validate.Fields // the second reading's values, when ModeBoth ran
 	reasons []ReviewReason
 	suspect map[int]bool
 
@@ -157,10 +186,46 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 		Reading:    a.out.reading,
 		Grounding:  gr.Grounding,
 		Validation: ruleResults(vr.Rules),
-		Suspicious: a.suspect[gr.Page] || a.suspect[0],
+		Suspicious: a.suspicious(),
 	}
 	if gr.Applicable {
 		ev.Provenance = []Provenance{provenanceOf(gr, a.out.reading, a.out.provider)}
+	}
+
+	// Two readings of one document. When they differ, at least one is wrong
+	// and we know which field — the strongest signal ovrin has, and the reason
+	// ModeBoth exists (ADR-0014).
+	var cands []Candidate
+	if a.alt != nil {
+		cmp := compare.Field(compare.KindOf(vr.Value), []compare.Candidate{
+			{Value: vr.Value, Reading: compare.Reading(a.out.reading), Confidence: 1},
+			{Value: a.alt[key], Reading: compare.Reading(a.out.secondReading)},
+		}, compare.WithDateOrder(compare.DateOrder(a.cfg.dateOrder)))
+
+		if cmp.Applicable {
+			value, note := 1.0, "the readings agree"
+			if !cmp.Agree {
+				value, note = 0.0, "the readings disagree"
+				for _, c := range cmp.Candidates {
+					cands = append(cands, Candidate{
+						Value:   c.Value,
+						Reading: Reading(c.Reading),
+						Source:  Provenance{Reading: Reading(c.Reading), Method: methodOf(Reading(c.Reading), a.out.provider)},
+					})
+				}
+				// Value holds the higher-confidence candidate, so a caller who
+				// ignores all of this still gets the better answer — which is
+				// what makes the feature cost nothing to not use. It is a
+				// ranking, not a resolution: nothing here settles which
+				// reading was right.
+				if cmp.Best.Value != nil {
+					vr.Value = cmp.Best.Value
+				}
+			}
+			ev.Candidates = cands
+			ev.Agreement = &value
+			ev.AgreementNote = note
+		}
 	}
 
 	conf, signals := a.score(f, vr, gr, ev)
@@ -173,6 +238,7 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 		Signals:    signals,
 		Provenance: ev.Provenance,
 		Validation: ev.Validation,
+		Candidates: cands,
 	}
 	if vr.Message != "" {
 		fr.Errors = append(fr.Errors, &Error{Op: OpValidate, Field: key, Kind: ErrSchema, Message: vr.Message})
@@ -187,7 +253,7 @@ func (a *assembler) scalar(f schema.Field, raw any, target reflect.Value, key st
 	if !fr.Valid {
 		a.valid = false
 	}
-	a.recordReasons(f, key, vr, gr, conf)
+	a.recordReasons(f, key, vr, gr, conf, cands)
 	if required(f) {
 		a.required = append(a.required, conf)
 	} else {
@@ -240,7 +306,19 @@ func (a *assembler) crossField() {
 	}
 }
 
-func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result, gr ground.Result, conf float64) {
+// suspicious reports whether the document carried hidden content.
+//
+// It is deliberately document-wide rather than per-page. Keying it on the
+// field's own page was wrong twice over: a value that could not be grounded
+// has no page at all — and those are exactly the fields an injection is most
+// likely to have produced — and the instruction an attacker hid on page one is
+// read by the model along with everything else, so there is no way to know
+// which value it moved.
+func (a *assembler) suspicious() bool {
+	return len(a.suspect) > 0
+}
+
+func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result, gr ground.Result, conf float64, cands []Candidate) {
 	add := func(why string) { a.reasons = append(a.reasons, ReviewReason{Field: key, Why: why}) }
 
 	switch {
@@ -249,11 +327,14 @@ func (a *assembler) recordReasons(f schema.Field, key string, vr validate.Result
 	case gr.Applicable && gr.Grounding == ground.NotFound:
 		add(ground.ReasonNotFound)
 	}
+	if len(cands) > 1 {
+		add("the readings disagree")
+	}
 	if vr.Ambiguity != nil {
 		add("the date is ambiguous and ovrin will not guess which reading is meant")
 	}
-	if a.suspect[gr.Page] || a.suspect[0] {
-		add("the source page carried content that looked like an injection attempt")
+	if a.suspicious() {
+		add("the source carried content that looked like an injection attempt")
 	}
 	if conf < a.cfg.reviewThreshold && vr.Found {
 		add("confidence is below the review threshold")
@@ -401,4 +482,54 @@ func set(target reflect.Value, v any) {
 
 func round2(f float64) float64 {
 	return float64(int64(f*100+0.5)) / 100
+}
+
+// secondValues walks a second reading's reply through the same schema, so its
+// values are keyed exactly as the first reading's are.
+//
+// Comparing by key rather than by position is what makes the comparison mean
+// anything: two replies answer the same questions, and a positional match would
+// compare an invoice number against a vendor name the moment one reply omitted
+// a field.
+func secondValues(sch *schema.Schema, object map[string]any, cfg *config) validate.Fields {
+	v := validate.New(validate.WithDateOrder(validate.DateOrder(cfg.dateOrder)))
+	out := make(validate.Fields)
+	var walk func(fields []schema.Field, obj map[string]any, prefix string)
+	walk = func(fields []schema.Field, obj map[string]any, prefix string) {
+		for i := range fields {
+			f := fields[i]
+			key := f.Key
+			if prefix != "" {
+				key = prefix + "." + leaf(f.Key)
+			}
+			raw := lookup(obj, leaf(f.Key))
+			switch f.Kind {
+			case schema.KindObject:
+				nested, _ := raw.(map[string]any)
+				walk(f.Fields, nested, key)
+			case schema.KindArray:
+				items, _ := raw.([]any)
+				for j, item := range items {
+					if f.Elem == nil {
+						continue
+					}
+					ek := schema.IndexKey(key, j)
+					if f.Elem.Kind == schema.KindObject {
+						nested, _ := item.(map[string]any)
+						walk(f.Elem.Fields, nested, ek)
+						continue
+					}
+					if r := v.Field(*f.Elem, item); r.Converted {
+						out[ek] = r.Value
+					}
+				}
+			default:
+				if r := v.Field(f, raw); r.Converted {
+					out[key] = r.Value
+				}
+			}
+		}
+	}
+	walk(sch.Fields, object, "")
+	return out
 }

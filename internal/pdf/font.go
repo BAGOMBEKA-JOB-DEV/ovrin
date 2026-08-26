@@ -120,8 +120,23 @@ func (d *Doc) loadSimple(f *font, dict Dict, sub Name, dp detect.Depth) {
 			}
 		}
 	}
+	if d.symbolicTrueType(dict, sub, dp) {
+		// A symbolic TrueType's codes mean whatever the font program's own
+		// cmap says they mean, and this package does not read font programs.
+		// StandardEncoding is not a fallback here, it is a fabrication: the
+		// codes would decode to Latin letters of the right shape and the
+		// wrong identity, the decodable ratio would pass, and the page would
+		// be used. Clearing the table makes every code this font shows
+		// undecodable unless something authoritative maps it, which is what
+		// [Stats] counts and what sends the page to OCR
+		// (docs/pipeline.md stage 2, docs/adr/0011-pdf-text-extraction.md).
+		f.clearEncoding()
+	}
 	switch e := d.resolve(dict["Encoding"], dp).(type) {
 	case Name:
+		// A named base encoding is the document asserting what its codes
+		// mean, even for a symbolic font. An assertion by the document is
+		// worth honouring; an assumption by this package is not.
 		if enc, _, ok := baseEncoding(e); ok {
 			f.setBase(enc)
 		}
@@ -156,6 +171,58 @@ func (d *Doc) loadSimple(f *font, dict Dict, sub Name, dp detect.Depth) {
 			f.builtin = "Helvetica"
 		}
 	}
+}
+
+// The FontDescriptor /Flags bits that say whether a font's codes mean what a
+// Latin encoding says they mean.
+const (
+	flagSymbolic    = 1 << 2
+	flagNonsymbolic = 1 << 5
+)
+
+// symbolicTrueType reports that this is a TrueType font whose descriptor calls
+// it symbolic, and whose codes therefore mean nothing outside its own font
+// program.
+//
+// Both halves matter. A font with no descriptor is one of the standard
+// fourteen or a system face, and a Latin encoding is the right guess for it. A
+// non-symbolic TrueType declares that its codes are a standard encoding, which
+// is exactly the assertion that makes reading them safe. Only the symbolic
+// case is a font whose codes are private, and it is the case a subsetter
+// produces.
+//
+// It is deliberately not extended to Type 1: a symbolic Type 1 font has the
+// same problem, but the population is dominated by TeX output whose codes are
+// close enough to a Latin encoding that refusing it would send working
+// documents to OCR for no gain. That is a judgement about a corpus and it
+// belongs in the evaluation harness rather than here
+// (docs/adr/0023-evaluation-corpus.md).
+func (d *Doc) symbolicTrueType(dict Dict, sub Name, dp detect.Depth) bool {
+	fd, ok := d.resolve(dict["FontDescriptor"], dp).(Dict)
+	if !ok {
+		return false
+	}
+	if sub != "TrueType" {
+		// A /Subtype that is absent or wrong is still a TrueType when the
+		// descriptor embeds a TrueType program. The key is tested rather than
+		// resolved, because whether the stream is readable is not the
+		// question being asked.
+		if _, embedded := fd["FontFile2"]; !embedded {
+			return false
+		}
+	}
+	flags, ok := toInt(d.resolve(fd["Flags"], dp))
+	if !ok {
+		return false
+	}
+	return flags&flagSymbolic != 0 && flags&flagNonsymbolic == 0
+}
+
+// clearEncoding makes every code undecodable, so that only a ToUnicode entry
+// or an encoding the document itself named can put a character back.
+func (f *font) clearEncoding() {
+	f.enc = [256]rune{}
+	f.encKnown = [256]bool{}
 }
 
 // setBase replaces the code-to-character table and its known-code flags.

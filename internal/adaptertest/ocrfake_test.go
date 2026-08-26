@@ -42,7 +42,6 @@ type fakeOCR struct {
 	// other way for a DocumentOCR to reach what it is being asked to read. A
 	// real adapter has the same problem and solves it the same way until the
 	// core closes the gap.
-	document []byte
 
 	hc *http.Client
 }
@@ -50,11 +49,10 @@ type fakeOCR struct {
 const fakeOCRName = "fakeocr"
 
 // newFakeOCR returns a provider pointed at baseURL.
-func newFakeOCR(baseURL, apiKey string, document []byte) *fakeOCR {
+func newFakeOCR(baseURL, apiKey string) *fakeOCR {
 	return &fakeOCR{
-		url:      baseURL,
-		apiKey:   apiKey,
-		document: document,
+		url:    baseURL,
+		apiKey: apiKey,
 		// No timeout: bounding the call is the caller's context's job, and a
 		// client timeout here would make the cancellation assertion pass for
 		// the wrong reason.
@@ -150,14 +148,13 @@ func (o *fakeOCR) RecogniseDocument(ctx context.Context, doc ovrin.Document) ([]
 			"the provider reads only pdf and tiff documents, and this one is "+
 				doc.Kind.String())
 	}
-	if len(o.document) == 0 {
-		return nil, o.fail(ovrin.ErrUnsupported, 0,
-			"no document content is configured, and ovrin.Document carries none")
+	if len(doc.Data) == 0 {
+		return nil, o.fail(ovrin.ErrNoContent, 0, "the document is empty")
 	}
 
 	body, err := json.Marshal(map[string]any{
 		"mimeType": "application/pdf",
-		"content":  base64.StdEncoding.EncodeToString(o.document),
+		"content":  base64.StdEncoding.EncodeToString(doc.Data),
 	})
 	if err != nil {
 		return nil, o.fail(ovrin.ErrInternal, 0, "the request could not be encoded")

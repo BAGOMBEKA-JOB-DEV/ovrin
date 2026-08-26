@@ -110,6 +110,17 @@ type FieldEvidence struct {
 	// Candidates holds competing values when two readings disagreed.
 	Candidates []Candidate
 
+	// Agreement is whether two independent readings produced the same value,
+	// or nil when only one reading ran.
+	//
+	// Nil rather than zero, because "no second opinion was taken" and "the
+	// second opinion differed" are opposite facts and scoring them alike would
+	// penalise every single-reading extraction (docs/confidence.md §Signals).
+	Agreement *float64
+
+	// AgreementNote says which, in one line, for the signal's Note.
+	AgreementNote string
+
 	// Validation is each rule and its outcome.
 	Validation []RuleResult
 
