@@ -181,6 +181,24 @@ which has a name, a weight and a one-line note.
 **Every value points back at the document.** `Provenance` carries the reading,
 page, box and span, which is what makes review and audit possible.
 
+### Sources
+
+`Extract` takes a `Source`, not a file. Three constructors cover the ways a
+document arrives:
+
+```go
+func Reader(r io.Reader) Source   // an upload, a network body, a pipe
+func Bytes(b []byte) Source       // already in memory
+func File(path string) Source     // on disk
+```
+
+`Reader` is the primary one, because a document usually arrives as a stream and
+buffering it before ovrin can check its size limit would defeat the limit
+([ADR-0020](adr/0020-resource-limits.md)). Format is determined by content, not
+by filename or a caller-supplied media type — a `.pdf` that is actually a JPEG
+is common enough that trusting the name is how a parser gets handed input it
+was not written for.
+
 ---
 
 ## Flow
