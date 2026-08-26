@@ -120,7 +120,11 @@ pkg ovrin, method (*Error) Error() string
 pkg ovrin, method (*Error) Unwrap() []error
 pkg ovrin, method (*Error) WithCause(error) *Error
 pkg ovrin, method (*Explanation) String() string
+pkg ovrin, method (*Layout) Order()
 pkg ovrin, method (*Result[T]) Explain(string) (*Explanation, bool)
+pkg ovrin, method (Cell) Columns() int
+pkg ovrin, method (Cell) Covers(int, int) bool
+pkg ovrin, method (Cell) Rows() int
 pkg ovrin, method (CellKind) Header() bool
 pkg ovrin, method (CellKind) String() string
 pkg ovrin, method (CrossFields) Count(string) int
@@ -129,9 +133,13 @@ pkg ovrin, method (CrossFields) Text(string) (string, bool)
 pkg ovrin, method (CrossFields) Time(string) (time.Time, bool)
 pkg ovrin, method (Kind) String() string
 pkg ovrin, method (Layout) At(Ref) (Cell, bool)
+pkg ovrin, method (Layout) Check() error
 pkg ovrin, method (Layout) Ref(int, Cell) Ref
 pkg ovrin, method (Op) String() string
+pkg ovrin, method (Pair) Box() Rect
 pkg ovrin, method (Reading) String() string
+pkg ovrin, method (Ref) String() string
+pkg ovrin, method (Table) At(int, int) (Cell, bool)
 pkg ovrin, type BatchResult[T any] struct
 pkg ovrin, type BatchResult[T any] struct, Err error
 pkg ovrin, type BatchResult[T any] struct, Index int
