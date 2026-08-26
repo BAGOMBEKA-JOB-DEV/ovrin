@@ -9,23 +9,24 @@ module github.com/BAGOMBEKA-JOB-DEV/ovrin/otel
 // repository for no API this module uses. A minimum is not a maximum: a user
 // already on a newer OTel keeps it, because module resolution takes the higher
 // version.
-go 1.22.0
+go 1.25.0
 
 require (
 	github.com/BAGOMBEKA-JOB-DEV/ovrin v0.1.0
-	go.opentelemetry.io/otel v1.35.0
-	go.opentelemetry.io/otel/metric v1.35.0
-	go.opentelemetry.io/otel/sdk v1.35.0
-	go.opentelemetry.io/otel/sdk/metric v1.35.0
-	go.opentelemetry.io/otel/trace v1.35.0
+	go.opentelemetry.io/otel v1.45.0
+	go.opentelemetry.io/otel/metric v1.45.0
+	go.opentelemetry.io/otel/sdk v1.45.0
+	go.opentelemetry.io/otel/sdk/metric v1.45.0
+	go.opentelemetry.io/otel/trace v1.45.0
 )
 
 require (
-	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 )
 
 // The core module has no release tag yet, so the version above is a
