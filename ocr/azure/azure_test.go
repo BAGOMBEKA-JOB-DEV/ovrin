@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -1139,5 +1140,516 @@ func TestLocaleReachesTheWire(t *testing.T) {
 	}
 	if _, uri, _, _, _ := rec2.at(0); strings.Contains(uri, "locale") {
 		t.Errorf("request uri = %q, want no locale at all", uri)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Structure
+// ---------------------------------------------------------------------------
+
+// layoutModel is the model a caller asks for when structure is what they want.
+const layoutModel = "prebuilt-layout"
+
+// fixCell is one cell of a fixture table, in the unit its page declares.
+type fixCell struct {
+	kind             string
+	row, column      int
+	rowSpan, colSpan int
+	content          string
+	page             int
+	x0, y0, x1, y1   float64
+}
+
+func (c fixCell) json() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, `{"rowIndex":%d,"columnIndex":%d,"content":%q`, c.row, c.column, c.content)
+	if c.kind != "" {
+		fmt.Fprintf(&b, `,"kind":%q`, c.kind)
+	}
+	// The service omits a span of one rather than sending it, which is exactly
+	// the case an adapter that normalised spans itself would get wrong.
+	if c.rowSpan > 1 {
+		fmt.Fprintf(&b, `,"rowSpan":%d`, c.rowSpan)
+	}
+	if c.colSpan > 1 {
+		fmt.Fprintf(&b, `,"columnSpan":%d`, c.colSpan)
+	}
+	if c.page > 0 {
+		fmt.Fprintf(&b, `,"boundingRegions":[{"pageNumber":%d,"polygon":%s}]`,
+			c.page, polygonJSON(c.x0, c.y0, c.x1, c.y1))
+	}
+	b.WriteString("}")
+	return b.String()
+}
+
+// fixTable is one table of a fixture.
+type fixTable struct {
+	rows, columns  int
+	page           int
+	x0, y0, x1, y1 float64
+	cells          []fixCell
+}
+
+func (t fixTable) json() string {
+	cells := make([]string, 0, len(t.cells))
+	for _, c := range t.cells {
+		cells = append(cells, c.json())
+	}
+	return fmt.Sprintf(
+		`{"rowCount":%d,"columnCount":%d,"boundingRegions":[{"pageNumber":%d,"polygon":%s}],"cells":[%s]}`,
+		t.rows, t.columns, t.page, polygonJSON(t.x0, t.y0, t.x1, t.y1), strings.Join(cells, ","))
+}
+
+// fixPair is one key-value pair of a fixture. A nil value is a form field the
+// service found and read nothing in.
+type fixPair struct {
+	key        string
+	value      *string
+	page       int
+	confidence float64
+	kx0, ky0   float64
+	kx1, ky1   float64
+	vx0, vy0   float64
+	vx1, vy1   float64
+}
+
+func (p fixPair) json() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, `{"key":{"content":%q,"boundingRegions":[{"pageNumber":%d,"polygon":%s}]}`,
+		p.key, p.page, polygonJSON(p.kx0, p.ky0, p.kx1, p.ky1))
+	if p.value != nil {
+		fmt.Fprintf(&b, `,"value":{"content":%q,"boundingRegions":[{"pageNumber":%d,"polygon":%s}]}`,
+			*p.value, p.page, polygonJSON(p.vx0, p.vy0, p.vx1, p.vy1))
+	}
+	fmt.Fprintf(&b, `,"confidence":%v}`, p.confidence)
+	return b.String()
+}
+
+// structureJSON renders the members a layout analysis carries alongside its
+// pages. An empty tables list and no tables member are different responses, and
+// only the second is a model that does not look.
+func structureJSON(tables []fixTable, pairs []fixPair) string {
+	encoded := make([]string, 0, len(tables))
+	for _, t := range tables {
+		encoded = append(encoded, t.json())
+	}
+	rendered := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		rendered = append(rendered, p.json())
+	}
+	return fmt.Sprintf(`,"tables":[%s],"keyValuePairs":[%s]`,
+		strings.Join(encoded, ","), strings.Join(rendered, ","))
+}
+
+// invoiceTable is the table the structure tests work against, on the raster
+// page and therefore in its pixels — 850 by 1100 onto 612 by 792 points is a
+// factor of exactly 0.72, so every expected box below is the fixture's number
+// times 0.72.
+//
+//	| Item             | Amount (spanning two columns) |
+//	| Consulting       | 1,250.00      | USD           |
+//
+// Row 2 is declared and empty: a table whose last row is blank still has that
+// row, and an adapter deriving the size from the cells would lose it.
+var invoiceTable = fixTable{
+	rows: 3, columns: 3, page: 1,
+	x0: 100, y0: 300, x1: 800, y1: 500,
+	cells: []fixCell{
+		// Out of reading order, so that an adapter handing back the order it
+		// received is visible.
+		{kind: "content", row: 1, column: 1, content: "1,250.00", page: 1, x0: 300, y0: 400, x1: 500, y1: 425},
+		{kind: "columnHeader", row: 0, column: 0, content: "Item", page: 1, x0: 100, y0: 300, x1: 280, y1: 330},
+		{kind: "columnHeader", row: 0, column: 1, colSpan: 2, content: "Amount", page: 1, x0: 300, y0: 300, x1: 800, y1: 330},
+		{kind: "content", row: 1, column: 0, content: "Consulting", page: 1, x0: 100, y0: 400, x1: 280, y1: 425},
+		{kind: "content", row: 1, column: 2, content: "USD", page: 1, x0: 520, y0: 400, x1: 800, y1: 425},
+	},
+}
+
+func blankValue() *string { s := "4 March 1969"; return &s }
+
+var invoicePairs = []fixPair{
+	{
+		key: "Date of birth", value: blankValue(), page: 1, confidence: 0.94,
+		kx0: 100, ky0: 600, kx1: 250, ky1: 620,
+		vx0: 300, vy0: 600, vx1: 450, vy1: 620,
+	},
+	{
+		// A form field the service found and read nothing in. Dropping it
+		// would turn "this box was blank" into "there is no such box".
+		key: "Signature", page: 1, confidence: 0.81,
+		kx0: 100, ky0: 700, kx1: 250, ky1: 720,
+	},
+}
+
+func layoutBody(tables []fixTable, pairs []fixPair) string {
+	return resultJSONWith([]fixPage{rasterPage}, "en", layoutModel, structureJSON(tables, pairs))
+}
+
+// acceptedHeader is the address a submission is accepted with, which is where
+// this package will go looking for the result.
+var acceptedHeader = map[string]string{
+	"Operation-Location": "%BASE%/documentintelligence/documentModels/" +
+		layoutModel + "/analyzeResults/1f9a?api-version=" + DefaultAPIVersion,
+}
+
+// recogniseWith runs one analysis against a canned final result and returns the
+// recognition, so each structure test says only what it is about.
+func recogniseWith(t *testing.T, body string, opts ...Option) *ovrin.Recognition {
+	t.Helper()
+
+	p, _ := serve(t,
+		reply{status: http.StatusAccepted, header: acceptedHeader},
+		reply{status: http.StatusOK, body: body},
+	)
+	for _, o := range opts {
+		o(p)
+	}
+	rec, err := p.Recognise(context.Background(), testPage())
+	if err != nil {
+		t.Fatalf("Recognise: %v", err)
+	}
+	return rec
+}
+
+// The distinction the whole design rests on: nil is a model that does not look
+// for structure, and an empty Layout is one that looked and found none. A
+// caller deciding whether to read a page as a table or as prose needs to tell
+// those apart, and collapsing them makes that decision unanswerable
+// (ADR-0009).
+func TestTheLayoutPointerSaysWhetherAnybodyLooked(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		body      string
+		wantNil   bool
+		wantEmpty bool
+	}{
+		{
+			name:    "the read model does not look",
+			body:    successBody(),
+			wantNil: true,
+		},
+		{
+			name:      "a layout model that found no structure",
+			body:      layoutBody(nil, nil),
+			wantEmpty: true,
+		},
+		{
+			// A layout analysis of a page with nothing on it. It still looked.
+			name:      "a layout model on a page with no content at all",
+			body:      resultJSONWith(nil, "", layoutModel, structureJSON(nil, nil)),
+			wantEmpty: true,
+		},
+		{
+			name: "a layout model that found a table",
+			body: layoutBody([]fixTable{invoiceTable}, nil),
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := recogniseWith(t, tc.body)
+			switch {
+			case tc.wantNil:
+				if rec.Layout != nil {
+					t.Fatalf("Layout = %+v, want nil for a model that does not report structure", rec.Layout)
+				}
+			case rec.Layout == nil:
+				t.Fatal("Layout is nil; the model looked and nil says it did not")
+			case tc.wantEmpty:
+				if len(rec.Layout.Tables) != 0 || len(rec.Layout.Pairs) != 0 {
+					t.Errorf("Layout = %+v, want it empty", rec.Layout)
+				}
+			default:
+				if len(rec.Layout.Tables) == 0 {
+					t.Error("Layout carries no tables")
+				}
+			}
+		})
+	}
+}
+
+// A model the service ran that this package has never heard of still reports
+// structure: assuming otherwise would hand a caller who configured a custom
+// model a nil Layout, which reads as "nobody looked" when somebody did.
+func TestACustomModelIsAssumedToReportStructure(t *testing.T) {
+	t.Parallel()
+
+	body := resultJSONWith([]fixPage{rasterPage}, "en", "my-invoices-v3", structureJSON(nil, nil))
+	if rec := recogniseWith(t, body, WithModel("my-invoices-v3")); rec.Layout == nil {
+		t.Error("Layout is nil for a custom model")
+	}
+}
+
+// The whole mapping, asserted as one value: a table's grid, its cells, their
+// kinds, their spans and their geometry converted into page points.
+func TestTablesCrossTheSeam(t *testing.T) {
+	t.Parallel()
+
+	rec := recogniseWith(t, layoutBody([]fixTable{invoiceTable}, nil))
+	if rec.Layout == nil {
+		t.Fatal("Layout is nil")
+	}
+	if len(rec.Layout.Tables) != 1 {
+		t.Fatalf("got %d tables, want 1", len(rec.Layout.Tables))
+	}
+
+	got := rec.Layout.Tables[0]
+	want := ovrin.Table{
+		// Stamped from the page that was recognised, not from the reply: a
+		// page sent on its own comes back numbered 1 whatever page of the
+		// caller's document it was.
+		Page: adaptertest.OCRPageNumber,
+		Box:  ovrin.Rect{MinX: 72, MinY: 216, MaxX: 576, MaxY: 360},
+		// The service's own counts. Row 2 is empty and still declared.
+		Rows: 3, Columns: 3,
+		Cells: []ovrin.Cell{
+			{Row: 0, Column: 0, Kind: ovrin.CellColumnHeader, Text: "Item",
+				Box: ovrin.Rect{MinX: 72, MinY: 216, MaxX: 201.6, MaxY: 237.6}},
+			// The span arrives as 2 and is passed through; the unreported
+			// spans stay zero, which means one on ovrin.Cell.
+			{Row: 0, Column: 1, ColumnSpan: 2, Kind: ovrin.CellColumnHeader, Text: "Amount",
+				Box: ovrin.Rect{MinX: 216, MinY: 216, MaxX: 576, MaxY: 237.6}},
+			{Row: 1, Column: 0, Kind: ovrin.CellData, Text: "Consulting",
+				Box: ovrin.Rect{MinX: 72, MinY: 288, MaxX: 201.6, MaxY: 306}},
+			{Row: 1, Column: 1, Kind: ovrin.CellData, Text: "1,250.00",
+				Box: ovrin.Rect{MinX: 216, MinY: 288, MaxX: 360, MaxY: 306}},
+			{Row: 1, Column: 2, Kind: ovrin.CellData, Text: "USD",
+				Box: ovrin.Rect{MinX: 374.4, MinY: 288, MaxX: 576, MaxY: 306}},
+		},
+		// The service publishes no confidence for a table or a cell, and zero
+		// says so. A fabricated 1.0 would tell the confidence engine the table
+		// was read perfectly.
+		Confidence: 0,
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("table =\n%+v\n\nwant\n%+v", got, want)
+	}
+
+	// The cells arrived out of order and must have been put into ovrin's.
+	for i := 1; i < len(got.Cells); i++ {
+		a, b := got.Cells[i-1], got.Cells[i]
+		if a.Row > b.Row || (a.Row == b.Row && a.Column > b.Column) {
+			t.Errorf("cells %d and %d are not in reading order: %+v then %+v", i-1, i, a, b)
+		}
+	}
+
+	// The structure an adapter builds must satisfy the same rules an adapter's
+	// contract test asserts.
+	if err := rec.Layout.Check(); err != nil {
+		t.Errorf("Check: %v", err)
+	}
+
+	// The merged header covers columns 1 and 2, so asking for either returns
+	// it — which is the claim a grid exists to make.
+	if c, ok := rec.Layout.At(ovrin.Ref{Page: adaptertest.OCRPageNumber, Row: 0, Column: 2}); !ok || c.Text != "Amount" {
+		t.Errorf("At(row 0, column 2) = %q, %v; want the merged header", c.Text, ok)
+	}
+	// Row 2 is declared and empty: nothing covers it, and an empty Cell would
+	// claim the provider read an empty string there.
+	if _, ok := rec.Layout.At(ovrin.Ref{Page: adaptertest.OCRPageNumber, Row: 2, Column: 0}); ok {
+		t.Error("a declared but empty row returned a cell")
+	}
+}
+
+func TestKeyValuePairsCrossTheSeam(t *testing.T) {
+	t.Parallel()
+
+	rec := recogniseWith(t, layoutBody(nil, invoicePairs))
+	if rec.Layout == nil {
+		t.Fatal("Layout is nil")
+	}
+
+	want := []ovrin.Pair{
+		{
+			Page:  adaptertest.OCRPageNumber,
+			Key:   ovrin.Region{Text: "Date of birth", Box: ovrin.Rect{MinX: 72, MinY: 432, MaxX: 180, MaxY: 446.4}},
+			Value: ovrin.Region{Text: "4 March 1969", Box: ovrin.Rect{MinX: 216, MinY: 432, MaxX: 324, MaxY: 446.4}},
+			// The service's own for the association. It is not spread onto the
+			// two regions: it is about the pairing, and the service says
+			// nothing about how well either half was read.
+			Confidence: 0.94,
+		},
+		{
+			Page:       adaptertest.OCRPageNumber,
+			Key:        ovrin.Region{Text: "Signature", Box: ovrin.Rect{MinX: 72, MinY: 504, MaxX: 180, MaxY: 518.4}},
+			Value:      ovrin.Region{},
+			Confidence: 0.81,
+		},
+	}
+	if !reflect.DeepEqual(rec.Layout.Pairs, want) {
+		t.Errorf("pairs =\n%+v\n\nwant\n%+v", rec.Layout.Pairs, want)
+	}
+	if err := rec.Layout.Check(); err != nil {
+		t.Errorf("Check: %v", err)
+	}
+}
+
+// The service labels a cell with one of five words, and only three of them map
+// onto ovrin's closed set exactly. Neither of the other two is dropped, and
+// neither becomes CellUnknown, which means "the provider did not say".
+func TestCellKindMapping(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		kind string
+		want ovrin.CellKind
+	}{
+		{name: "a column header", kind: "columnHeader", want: ovrin.CellColumnHeader},
+		{name: "a row header", kind: "rowHeader", want: ovrin.CellRowHeader},
+		{name: "content", kind: "content", want: ovrin.CellData},
+		{
+			// The corner cell above a column of row headers. It labels the
+			// column beneath it; calling it a row header would attach it to a
+			// row it does not describe.
+			name: "a stub head", kind: "stubHead", want: ovrin.CellColumnHeader,
+		},
+		{
+			// It carries content and labels nothing, which is what CellData
+			// says. It is not CellUnknown: the service did classify it.
+			name: "a description", kind: "description", want: ovrin.CellData,
+		},
+		{
+			// A word this package has not seen. "The provider did not say" is
+			// the honest answer; calling it data would make a header row
+			// silently wrong instead of visibly absent.
+			name: "a kind added after this was written", kind: "footnote", want: ovrin.CellUnknown,
+		},
+		{name: "no kind at all", kind: "", want: ovrin.CellUnknown},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := cellKind(tc.kind); got != tc.want {
+				t.Errorf("cellKind(%q) = %q, want %q", tc.kind, got, tc.want)
+			}
+		})
+	}
+}
+
+// A layout that contradicts itself is a response nothing can be done with, and
+// half-mapping it would put a table into a caller's hands whose lookups return
+// whichever cell happened to be stored first (rule §6.1).
+func TestIncoherentStructureIsRefused(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		table fixTable
+	}{
+		{
+			name: "a cell outside the declared grid",
+			table: fixTable{
+				rows: 1, columns: 1, page: 1, x0: 100, y0: 300, x1: 800, y1: 500,
+				cells: []fixCell{{row: 0, column: 4, content: "4111111111111111", page: 1}},
+			},
+		},
+		{
+			name: "two cells in one position",
+			table: fixTable{
+				rows: 1, columns: 2, page: 1, x0: 100, y0: 300, x1: 800, y1: 500,
+				cells: []fixCell{
+					{row: 0, column: 0, content: "4111111111111111", page: 1},
+					{row: 0, column: 0, content: "4111111111111111", page: 1},
+				},
+			},
+		},
+		{
+			name: "a span running off the end",
+			table: fixTable{
+				rows: 2, columns: 2, page: 1, x0: 100, y0: 300, x1: 800, y1: 500,
+				cells: []fixCell{{row: 0, column: 0, rowSpan: 9, content: "4111111111111111", page: 1}},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p, _ := serve(t,
+				reply{status: http.StatusAccepted, header: acceptedHeader},
+				reply{status: http.StatusOK, body: layoutBody([]fixTable{tc.table}, nil)},
+			)
+			_, err := p.Recognise(context.Background(), testPage())
+			if !errors.Is(err, ovrin.ErrBadResponse) {
+				t.Fatalf("error is %v, want it to be ErrBadResponse", err)
+			}
+			// An error is a log line in five systems (rule §2.5, §7.5).
+			if strings.Contains(err.Error(), "4111") {
+				t.Errorf("the error carries a cell's text: %q", err)
+			}
+		})
+	}
+}
+
+// Structure is stated once for the whole result with each element naming its
+// pages, so a document analysis has to select rather than convert. A table
+// reported on page 2 must reach page 2's recognition and no other.
+func TestDocumentStructureIsSplitByPage(t *testing.T) {
+	t.Parallel()
+
+	// The document fixture is measured in inches, where a point is 1/72 of one.
+	onPage := func(n int, text string) fixTable {
+		return fixTable{
+			rows: 1, columns: 1, page: n, x0: 1, y0: 2, x1: 4, y1: 3,
+			cells: []fixCell{{kind: "content", row: 0, column: 0, content: text, page: n, x0: 1, y0: 2, x1: 4, y1: 3}},
+		}
+	}
+	body := resultJSONWith(documentPages, "en", layoutModel,
+		structureJSON([]fixTable{onPage(2, "second"), onPage(1, "first")}, nil))
+
+	p, _ := serve(t,
+		reply{status: http.StatusAccepted, header: acceptedHeader},
+		reply{status: http.StatusOK, body: body},
+	)
+	recs, err := p.RecogniseDocument(context.Background(), pdf(2, []byte("%PDF-1.7\n")))
+	if err != nil {
+		t.Fatalf("RecogniseDocument: %v", err)
+	}
+	if len(recs) != 2 {
+		t.Fatalf("got %d recognitions, want 2", len(recs))
+	}
+
+	for i, want := range []string{"first", "second"} {
+		l := recs[i].Layout
+		if l == nil {
+			t.Fatalf("page %d: Layout is nil", i+1)
+		}
+		if len(l.Tables) != 1 {
+			t.Fatalf("page %d: got %d tables, want 1", i+1, len(l.Tables))
+		}
+		if got := l.Tables[0]; got.Page != i+1 || got.Cells[0].Text != want {
+			t.Errorf("page %d: table is page %d holding %q, want page %d holding %q",
+				i+1, got.Page, got.Cells[0].Text, i+1, want)
+		}
+		if got, wantBox := l.Tables[0].Box, (ovrin.Rect{MinX: 72, MinY: 144, MaxX: 288, MaxY: 216}); got != wantBox {
+			t.Errorf("page %d: box = %+v, want %+v", i+1, got, wantBox)
+		}
+	}
+}
+
+// A Ref names a cell by position alone, which is the form that can go in a
+// provenance entry or a log line under the rule that document content never
+// reaches either (rule §2.5, §7.5).
+func TestARefNamesACellWithoutRepeatingIt(t *testing.T) {
+	t.Parallel()
+
+	rec := recogniseWith(t, layoutBody([]fixTable{invoiceTable}, nil))
+	cell, ok := rec.Layout.At(ovrin.Ref{Page: adaptertest.OCRPageNumber, Row: 1, Column: 1})
+	if !ok {
+		t.Fatal("the amount cell is not there")
+	}
+	if s := rec.Layout.Ref(0, cell).String(); strings.Contains(s, "1,250") {
+		t.Errorf("a rendered Ref carried the cell's text: %q", s)
 	}
 }
