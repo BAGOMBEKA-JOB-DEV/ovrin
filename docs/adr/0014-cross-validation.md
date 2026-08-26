@@ -65,8 +65,20 @@ When candidates disagree:
   nothing is discarded.
 - The `agreement` signal drops, which lowers the field's confidence
   ([ADR-0013](0013-multi-signal-confidence.md)).
-- `Result.NeedsReview` becomes true and a `ReviewReason` naming the field and
-  both values is appended.
+- `Result.NeedsReview` becomes true and a `ReviewReason` naming the field is
+  appended.
+
+> **Correction, 2026-08-26.** This line originally said the reason names "the
+> field and **both values**". It does not, and it must not. Rule
+> [§7.5](../rules.md#7-untrusted-input) keeps document content out of anything
+> log-shaped, and `docs/confidence.md`'s own example logs a reason verbatim
+> (`log.Printf("review: %s — %s", r.Field, r.Why)`) — so a value in `Why` would
+> put an extracted amount into a log line by following ovrin's own
+> documentation. The values are on `Candidates`, where a review interface reads
+> them deliberately rather than by accident.
+>
+> Found while implementing the comparison, and corrected here rather than
+> quietly, because the promise was made in this record.
 
 Comparison is **type-aware, not textual**. `25,000`, `25000` and `25 000` are
 the same number and do not constitute disagreement; `25,000` and `2,500` do.
