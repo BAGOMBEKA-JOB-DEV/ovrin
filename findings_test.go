@@ -341,4 +341,3 @@ func hasInjectionReason(reasons []ovrin.ReviewReason) bool {
 	}
 	return false
 }
-
