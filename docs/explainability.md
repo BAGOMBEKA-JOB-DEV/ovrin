@@ -193,7 +193,9 @@ work it out.
 
 ## Audit
 
-An `Explanation` marshals to JSON. Storing one per extracted field gives a
+An `Explanation` marshals to JSON. `RuleResult` carries a `Message string`
+rather than an `error` for exactly this reason; `FieldResult`, which does carry
+`[]error`, does not marshal usefully and is not intended to. Storing one per extracted field gives a
 record that answers, years later and without reprocessing: what value was
 extracted, from which page and region, by which reading and which provider,
 scored how and on what evidence, whether a human intervened.
@@ -205,7 +207,7 @@ twelve explanations with signals, spans and boxes. At scale, store what your
 retention policy requires and not more.
 
 **Never store the document content in the audit record via ovrin.** Errors,
-events and traces carry field names, pages and counts — never values
+events and traces carry pages and counts — never field values
 (rule [§7.5](rules.md#7-untrusted-input)). If your audit needs the source
 document, store the document, deliberately, under your own controls.
 

@@ -135,8 +135,9 @@ ovrin/                     module github.com/BAGOMBEKA-JOB-DEV/ovrin
 │   ├── adaptertest/       the shared contract suite
 │   └── sandbox/  testutil/
 │
-├── model/skyl/   ocr/tesseract/   ocr/google/   ocr/aws/
-├── render/pdfium/   otel/         ← each its own go.mod
+├── model/skyl/   ocr/tesseract/   ocr/google/
+├── ocr/textract/   ocr/azure/
+├── render/pdfium/   render/pdfiumcgo/   otel/   ← each its own go.mod
 ├── eval/                  corpus and harness
 └── docs/
 ```

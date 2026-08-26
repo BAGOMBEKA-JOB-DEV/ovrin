@@ -77,7 +77,7 @@ of an error message. Provider responses are classified into sentinels at the
 adapter boundary and every decision downstream reads the sentinel.
 
 **2.3 — Error strings are lowercase and unpunctuated**, prefixed `ovrin: ` at
-the package boundary. `errors.New("ovrin: no text layer and no OCR provider")`.
+the package boundary. `errors.New("ovrin: no provider configured for this document")`.
 
 **2.4 — Never discard an error.** `_ =` requires a comment on the same line
 saying why the error cannot matter here.
@@ -205,8 +205,9 @@ loop in it is a bug.
 **6.3 — Every adapter ends with a compile-time assertion.**
 `var _ ovrin.OCR = (*Provider)(nil)`.
 
-**6.4 — Adapters are constructed with `New(credential, opts ...Option)`** and
-never read the environment themselves. Reading `os.Getenv` inside a library is
+**6.4 — Adapters take their credential explicitly**, as `New(credential,
+opts ...Option)`; an adapter needing none takes options only, as
+`New(opts ...Option)`. No adapter reads the environment itself. Reading `os.Getenv` inside a library is
 how a program ends up talking to the wrong account.
 
 **6.5 — An adapter documents what it silently ignores.** Not just what it
@@ -237,8 +238,8 @@ Server-side request forgery via a crafted document is not a feature we are
 adding.
 
 **7.5 — Document content never reaches logs, traces, metrics or errors.** Hooks
-and spans carry field names, page numbers, byte counts, durations and
-confidence — never values. A caller who wants values has the `Result`.
+and spans carry field counts, page numbers, byte counts, durations and
+confidence — never field values, and never the text a field was read from. A caller who wants values has the `Result`.
 
 **7.6 — Committed fixtures contain no real personal data.** Redact before
 committing. A repository is forever and `git rm` is not deletion.

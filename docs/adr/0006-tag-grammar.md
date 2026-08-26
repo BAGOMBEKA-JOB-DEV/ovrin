@@ -1,6 +1,6 @@
 # ADR-0006: The `ovrin` struct tag grammar
 
-**Status:** Accepted · **Date:** 2026-08-26
+**Status:** Accepted · **Date:** 2026-08-26 · **Amended by** [ADR-0029](0029-v01-scope-corrected.md)
 
 ## Context
 

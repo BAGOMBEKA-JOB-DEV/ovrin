@@ -1,6 +1,6 @@
 # ADR-0019: Sentinels plus a typed `*Error` with multi-error `Unwrap`
 
-**Status:** Accepted · **Date:** 2026-08-26
+**Status:** Accepted · **Date:** 2026-08-26 · **Amended by** [ADR-0027](0027-twelve-sentinels-and-one-op-vocabulary.md)
 
 ## Context
 
@@ -38,10 +38,11 @@ var (
     ErrBadResponse       = errors.New("ovrin: provider returned an unusable response")
     ErrUnsupported       = errors.New("ovrin: unsupported by this provider")
     ErrEncrypted         = errors.New("ovrin: document is encrypted")
+    ErrBadRequest        = errors.New("ovrin: provider rejected the request")
 )
 
 type Error struct {
-    Op       string        // "parse", "ocr", "extract", "validate"
+    Op       Op            // the pipeline stage; see ADR-0027
     Provider string        // adapter name, if a provider was involved
     Page     int           // 1-based, 0 if not page-specific
     Field    string        // schema field, if field-specific
@@ -82,9 +83,9 @@ value answers both the kind question and the cause question. `Op`/`Page`/
 `Field` make errors debuggable without a debugger. The pattern is already
 proven in the maintainer's other library, so there is no novelty risk.
 
-**Bad.** Eleven sentinels is a lot to document and to keep meaningfully
-distinct, and the boundary between `ErrNoContent` and `ErrNoProvider` will be
-argued about. Multi-error `Unwrap` requires Go 1.20 and is unfamiliar enough
+**Bad.** Twelve sentinels is a lot to document and to keep meaningfully
+distinct, and the boundaries between `ErrNoContent` and `ErrNoProvider`, and
+between `ErrSchema` and `ErrBadRequest`, will be argued about. Multi-error `Unwrap` requires Go 1.20 and is unfamiliar enough
 that contributors will implement single-error `Unwrap` by habit. Adding a
 sentinel is a compatibility event, so the initial set has to be close to right.
 And having two failure channels — errors and `FieldResult.Errors` — means

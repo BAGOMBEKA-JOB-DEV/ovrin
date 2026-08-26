@@ -48,7 +48,12 @@ OCR providers that accept a PDF directly.
       ([ADR-0017](adr/0017-untrusted-document-content.md))
 - [ ] The three seams ([ADR-0007](adr/0007-model-seam.md),
       [ADR-0009](adr/0009-ocr-seam.md), [ADR-0010](adr/0010-no-cgo-in-core.md))
-- [ ] Validation: `required`, type checking, `min`, `max`
+- [ ] Validation: `required`, type checking, `min`, `max`, `format`, `enum`
+      ([ADR-0006](adr/0006-tag-grammar.md), [ADR-0029](adr/0029-v01-scope-corrected.md))
+- [ ] Nested structs and slices, to full depth
+- [ ] Cross-field validation rules, and the `cross_field` signal
+- [ ] `Explain` and its `String()` rendering
+      ([ADR-0016](adr/0016-explain-returns-data.md))
 - [ ] Grounding, and the `grounding` signal
 - [ ] `Result[T]`, `FieldResult`, partial results
       ([ADR-0004](adr/0004-partial-results.md))
@@ -65,9 +70,10 @@ OCR providers that accept a PDF directly.
 - [ ] The shared adapter contract suite
 - [ ] Evaluation harness, running against the seeded corpus
 
-**Explicitly not in v0.1:** nested schemas beyond one level, slices, `format`
-rules, `enum`, cross-field validation, two readings, local rasterising,
-fallback chains, `Explain`.
+**Explicitly not in v0.1**, and version-marked wherever the guides show them
+([ADR-0029](adr/0029-v01-scope-corrected.md)): two readings and
+cross-validation (v0.3), provider fallback chains (v0.2), local rasterising
+(v0.2), the `otel` module (v0.2), WebP input (v0.2).
 
 ---
 
@@ -77,11 +83,9 @@ fallback chains, `Explain`.
       what makes offline and air-gapped scanned-document processing possible
       ([ADR-0010](adr/0010-no-cgo-in-core.md)).
 - [ ] `ocr/tesseract`
-- [ ] `ocr/aws`, `ocr/azure`
-- [ ] Nested structs and slices to arbitrary depth
-- [ ] `format` and `enum` rules; date-order handling
+- [ ] `ocr/textract`, `ocr/azure`
+- [ ] Date-order handling for ambiguous dates
 - [ ] Per-field provenance with bounding boxes from every reading
-- [ ] `Explain` ([ADR-0016](adr/0016-explain-returns-data.md))
 - [ ] Provider fallback chains ([ADR-0018](adr/0018-fallback-is-a-decorator.md))
 - [ ] `otel` module
 
@@ -92,7 +96,6 @@ fallback chains, `Explain`.
 - [ ] DOCX, XLSX, CSV sources
 - [ ] Multi-page documents with per-page acquisition paths
 - [ ] Layout preservation — tables, columns, key-value regions
-- [ ] Cross-field validation rules
 - [ ] Two readings and cross-validation
       ([ADR-0014](adr/0014-cross-validation.md))
 - [ ] Extraction retry on schema-invalid output

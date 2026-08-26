@@ -47,8 +47,10 @@ ovrin/                        module github.com/BAGOMBEKA-JOB-DEV/ovrin
 ├── model/skyl/               own go.mod                ── ADR-0008
 ├── ocr/tesseract/            own go.mod
 ├── ocr/google/               own go.mod
-├── ocr/aws/                  own go.mod
+├── ocr/textract/             own go.mod — AWS Textract
+├── ocr/azure/                own go.mod
 ├── render/pdfium/            own go.mod, Wazero        ── ADR-0010
+├── render/pdfiumcgo/         own go.mod, cgo — opt-in
 ├── otel/                     own go.mod                ── ADR-0021
 │
 ├── eval/                     corpus and harness        ── ADR-0023

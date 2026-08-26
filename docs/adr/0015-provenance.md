@@ -1,6 +1,6 @@
 # ADR-0015: Every field carries where it came from
 
-**Status:** Accepted · **Date:** 2026-08-26
+**Status:** Accepted · **Date:** 2026-08-26 · **Amended by** [ADR-0028](0028-reading-and-readingmode.md)
 
 ## Context
 

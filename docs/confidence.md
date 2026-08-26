@@ -60,7 +60,7 @@ type Signal struct {
 | `ocr` | character recognition over the words backing this value | OCR provider, normalised | the value came from OCR |
 | `schema` | the value satisfied its type and rules | validation | always |
 | `cross_field` | consistency with sibling fields | cross-field rules | the schema declares any |
-| `agreement` | two independent readings agree | comparison | `ReadingBoth` |
+| `agreement` | two independent readings agree | comparison | `ModeBoth` |
 | `format` | the value matches the expected shape for its kind | format checks | the field declares `format` |
 | `grounding` | the value actually appears in the source | grounding search | always |
 

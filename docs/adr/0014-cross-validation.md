@@ -31,7 +31,7 @@ definitely wrong, and we know which field.
 ## Decision
 
 When two readings of the same document are available, ovrin extracts from both
-and compares field by field. `WithReading(ovrin.ReadingBoth)` requests this; it
+and compares field by field. `WithReading(ovrin.ModeBoth)` requests this; it
 is opt-in because it roughly doubles cost.
 
 Disagreement is recorded, never resolved silently

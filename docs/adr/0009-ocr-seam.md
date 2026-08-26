@@ -57,7 +57,7 @@ type Word struct {
 }
 ```
 
-Modules: `ovrin/ocr/tesseract`, `ovrin/ocr/google`, `ovrin/ocr/aws`,
+Modules: `ovrin/ocr/tesseract`, `ovrin/ocr/google`, `ovrin/ocr/textract`,
 `ovrin/ocr/azure`. Each has its own `go.mod`, its own release tag and its own
 CI matrix row. The core has none of them.
 

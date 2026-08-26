@@ -22,8 +22,8 @@ system that cannot tell those apart will eventually pay the wrong amount.
 
 ## Decision
 
-`Extract` returns a populated `Result[T]` alongside any error, and the two
-answer different questions.
+`Extract` returns either a `*Result[T]` or an error, never both, and `Valid`
+rather than `error` reports whether the data is good.
 
 ```go
 type Result[T any] struct {
@@ -43,8 +43,9 @@ type Result[T any] struct {
 - `Valid` reports whether every validation rule in the schema passed. It is
   independent of `error`.
 - `Data` holds every field that was read, whether or not `Valid` is false.
-- `Fields` holds one entry per schema field, always, including fields that were
-  not found.
+- `Fields` holds one entry per schema field, including fields that were not
+  found. A slice field additionally contributes one entry per extracted element
+  (`items[0]`, `items[1]`…), so the number of keys depends on what was read.
 
 A field that could not be read is **absent and marked absent**. It is never
 filled with a zero value, and never guessed (rule

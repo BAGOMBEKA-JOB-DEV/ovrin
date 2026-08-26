@@ -50,7 +50,7 @@ type Signal struct {
 }
 
 type Scorer interface {
-    Score(field FieldEvidence) (confidence float64, signals []Signal)
+    Score(f FieldEvidence) (confidence float64, signals []Signal)
 }
 ```
 

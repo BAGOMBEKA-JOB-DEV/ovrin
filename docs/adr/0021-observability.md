@@ -1,6 +1,6 @@
 # ADR-0021: Hooks in the core, OpenTelemetry in its own module
 
-**Status:** Accepted · **Date:** 2026-08-26
+**Status:** Accepted · **Date:** 2026-08-26 · **Amended by** [ADR-0027](0027-twelve-sentinels-and-one-op-vocabulary.md)
 
 ## Context
 
@@ -29,7 +29,7 @@ accident when someone adds a helpful attribute.
 type Hook func(ctx context.Context, ev Event)
 
 type Event struct {
-    Op         string        // "parse", "render", "ocr", "extract", "validate", "score"
+    Op         Op            // the pipeline stage; see ADR-0027
     Provider   string
     Page       int
     Attempt    int
@@ -52,7 +52,7 @@ responsibility.
 into spans and metrics. It depends on OTel; the core does not.
 
 ```go
-c := ovrin.New(ovrinotel.Hook(tracerProvider, meterProvider))
+c := ovrin.New(ovrinotel.Option(tracerProvider, meterProvider))
 ```
 
 **No document content in events, ever** (rule

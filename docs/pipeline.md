@@ -257,8 +257,8 @@ Signals that do not apply are **absent, not zero** — a text-layer PDF has no
 absence as evidence against the value.
 
 `NeedsReview` is set when confidence falls below the threshold, when readings
-disagree, when a required field is missing, when grounding failed, or when
-suspicious content was flagged. Each sets a `ReviewReason` naming the field and
+disagree, when a required field is missing, when grounding failed, when a
+cross-field rule failed, or when suspicious content was flagged. Each sets a `ReviewReason` naming the field and
 the cause.
 
 **Confidence is currently a ranking signal, not a probability.** The weights

@@ -68,7 +68,7 @@ silently relaxed constraint.
 | Key-value pairs | ⛔ | ⚠️ same | ⚠️ same | ⚠️ same |
 | Provider-side entity extraction | ⛔ not used — see below | ⛔ | ⛔ | ⛔ |
 | Runs offline | ✅ | ⛔ | ⛔ | ⛔ |
-| Requires cgo | ⚠️ yes in `ocr/tesseract` | ⛔ no | ⛔ no | ⛔ no |
+| Requires cgo [^cgo] | yes | no | no | no |
 
 **The table and key-value rows are the honest ones.** Document AI, Textract and
 Azure all return richer structure than ovrin's `Recognition` carries, and
@@ -88,11 +88,11 @@ uninterpretable.
 | Capability | `render/pdfium` | `render/pdfiumcgo` |
 |---|---|---|
 | Rasterise a page | ✅ | ✅ |
-| Requires cgo | ⛔ no — Wazero | ⚠️ yes |
-| Cross-compiles | ✅ | ⚠️ no |
-| Static binary | ✅ | ⚠️ no |
-| Speed | ⚠️ materially slower than native | ✅ |
-| Binary size | ⚠️ embeds a large WASM blob | ✅ |
+| Requires cgo [^cgo] | no — Wazero | yes |
+| Cross-compiles | yes | no |
+| Static binary | yes | no |
+| Speed | materially slower than native | native |
+| Binary size | embeds a large WASM blob | small |
 | DPI control | ✅ | ✅ |
 | Encrypted PDFs | ⛔ | ⛔ |
 
@@ -122,14 +122,14 @@ throughput-bound deployments that accept the toolchain.
 
 | Capability | v0.1 | v0.2 | v0.3 | v1.0 |
 |---|---|---|---|---|
-| Typed extraction, flat structs | ✅ | ✅ | ✅ | ✅ |
-| Nested structs, slices | ⛔ | ✅ | ✅ | ✅ |
+| Typed extraction | ✅ | ✅ | ✅ | ✅ |
+| Nested structs, slices, to full depth | ✅ | ✅ | ✅ | ✅ |
 | `required`, `min`, `max` | ✅ | ✅ | ✅ | ✅ |
-| `format`, `enum` | ⛔ | ✅ | ✅ | ✅ |
-| Cross-field rules | ⛔ | ⛔ | ✅ | ✅ |
+| `format`, `enum` | ✅ | ✅ | ✅ | ✅ |
+| Cross-field rules | ✅ | ✅ | ✅ | ✅ |
 | Grounding | ✅ | ✅ | ✅ | ✅ |
 | Provenance with boxes | ⚠️ page only | ✅ | ✅ | ✅ |
-| `Explain` | ⛔ | ✅ | ✅ | ✅ |
+| `Explain` | ✅ | ✅ | ✅ | ✅ |
 | Two readings, cross-validation | ⛔ | ⛔ | ✅ | ✅ |
 | Provider fallback | ⛔ | ✅ | ✅ | ✅ |
 | Circuit breaking | ⛔ | ⛔ | ⛔ | ✅ |
@@ -141,3 +141,8 @@ throughput-bound deployments that accept the toolchain.
 The ⚠️ in v0.1 provenance is the one to watch: page-level provenance is enough
 for grounding but not enough to highlight a region, so review interfaces built
 against v0.1 will need changing at v0.2.
+
+[^cgo]: Plain yes/no, not a ⚠️. Requiring cgo is a documented property of a
+module, not a silent degradation — and every ⚠️ in this document is
+contractually a behaviour the shared contract suite asserts, which is not
+something that can be written for "needs a C toolchain".

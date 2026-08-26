@@ -40,7 +40,7 @@ type Explanation struct {
     Signals    []Signal        // every input, with weight and note
     Provenance []Provenance    // where it came from
     Candidates []Candidate     // competing readings, if any
-    Validation []RuleResult    // each rule, and whether it passed
+    Validation []RuleResult    // each rule, whether it passed, and why not
     Reasons    []ReviewReason
 }
 ```

@@ -1,9 +1,14 @@
 # Getting started
 
 > **Ovrin has not been implemented yet.** This document specifies the intended
-> experience, and is written to be executable the day v0.1 exists. Nothing
-> below works today. See the status section of the
-> [README](../README.md#status).
+> experience. Nothing below works today; see the
+> [README's status section](../README.md#status).
+>
+> Sections marked <sup>v0.2</sup> or <sup>v0.3</sup> describe features that will
+> not be in the first release. Everything unmarked is v0.1 scope, and the
+> documentation checks in CI enforce that — an unmarked example may not use a
+> feature [`feature-matrix.md`](feature-matrix.md) marks ⛔ for the current
+> version ([ADR-0029](adr/0029-v01-scope-corrected.md)).
 
 **Contents:** [Install](#install) · [First extraction](#first-extraction) ·
 [Reading the result](#reading-the-result) · [Scanned documents](#scanned-documents) ·
@@ -143,6 +148,9 @@ if e, ok := res.Explain("total"); ok {
 
 ## Scanned documents
 
+> **Cloud OCR works in v0.1. Local OCR needs `render/pdfium`, which arrives in
+> v0.2** ([ADR-0029](adr/0029-v01-scope-corrected.md)).
+
 A scan has no text layer, so the page must be read as pixels. There are two
 routes.
 
@@ -208,14 +216,14 @@ of one bad one.
 
 ---
 
-## Two readings
+## Two readings <sup>v0.3</sup>
 
 When a value being wrong has a real consequence, run two independent readings
 and compare them ([ADR-0014](adr/0014-cross-validation.md)):
 
 ```go
 res, err := ovrin.Extract[Invoice](ctx, client, src,
-    ovrin.WithReading(ovrin.ReadingBoth),
+    ovrin.WithReading(ovrin.ModeBoth),
 )
 
 if f := res.Fields["total"]; len(f.Candidates) > 1 {
@@ -234,7 +242,7 @@ This roughly doubles cost and latency, which is why it is opt-in.
 
 ---
 
-## Provider fallback
+## Provider fallback <sup>v0.2</sup>
 
 A chain is an ordinary provider, so the pipeline cannot tell the difference
 ([ADR-0018](adr/0018-fallback-is-a-decorator.md)):
@@ -280,6 +288,8 @@ public uploads.
 ---
 
 ## Observability
+
+> **Hooks work in v0.1. The `ovrin/otel` module arrives in v0.2.**
 
 ```go
 client := ovrin.New(

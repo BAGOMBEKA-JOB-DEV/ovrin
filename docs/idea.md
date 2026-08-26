@@ -66,7 +66,7 @@ type Invoice struct {
     Total  float64 `ovrin:"total amount including tax,required,min=0"`
 }
 
-res, err := ovrin.Extract[Invoice](ctx, client, file)
+res, err := ovrin.Extract[Invoice](ctx, client, ovrin.File("invoice.pdf"))
 ```
 
 Three commitments distinguish it from a wrapper around a model call.

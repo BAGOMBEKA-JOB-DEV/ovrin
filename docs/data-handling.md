@@ -53,7 +53,7 @@ other egress paths.
 | `OCR` adapter | page images, or the PDF itself for providers that accept one | the OCR provider you configured |
 | `Renderer` | nothing | — runs locally |
 | Core | nothing | — |
-| Hooks | field names, page numbers, counts, durations, confidences | wherever you send them |
+| Hooks | field counts, page numbers, byte counts, durations, confidences | wherever you send them |
 
 **The model sees the whole normalised document**, not just the fields you
 asked for. Extraction requires context; a model cannot find the total without

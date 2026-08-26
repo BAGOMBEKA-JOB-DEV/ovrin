@@ -24,7 +24,7 @@ type Invoice struct {
 Ask for it:
 
 ```go
-res, err := ovrin.Extract[Invoice](ctx, client, file)
+res, err := ovrin.Extract[Invoice](ctx, client, ovrin.File("invoice.pdf"))
 if err != nil {
     return err
 }
@@ -77,8 +77,8 @@ use, and nothing else enters your `go.sum`:
 go get github.com/BAGOMBEKA-JOB-DEV/ovrin/model/skyl      # OpenAI, Anthropic, Gemini, Ollama, …
 go get github.com/BAGOMBEKA-JOB-DEV/ovrin/ocr/tesseract   # local OCR
 go get github.com/BAGOMBEKA-JOB-DEV/ovrin/ocr/google      # Cloud Vision / Document AI
-go get github.com/BAGOMBEKA-JOB-DEV/ovrin/render/pdfium   # rasterise scanned PDFs, no cgo
-go get github.com/BAGOMBEKA-JOB-DEV/ovrin/otel            # OpenTelemetry
+go get github.com/BAGOMBEKA-JOB-DEV/ovrin/render/pdfium   # v0.2 — rasterise scanned PDFs, no cgo
+go get github.com/BAGOMBEKA-JOB-DEV/ovrin/otel            # v0.2 — OpenTelemetry
 ```
 
 Go 1.22 or newer.
@@ -88,7 +88,7 @@ Go 1.22 or newer.
 | Input | v0.1 | How |
 |---|---|---|
 | PDF with a text layer | yes | read directly — exact and nearly free |
-| PNG, JPEG, TIFF, WebP | yes | OCR or vision |
+| PNG, JPEG, TIFF | yes | OCR or vision |
 | Scanned PDF | yes, via cloud OCR | providers that accept a PDF rasterise server-side |
 | Scanned PDF, offline | v0.2 | needs a local renderer |
 | DOCX, XLSX, CSV | v0.3 | |
@@ -119,7 +119,7 @@ never filled with a zero value, because a payments system must be able to tell
 "the total is zero" from "we could not read the total".
 
 ```go
-res, err := ovrin.Extract[Invoice](ctx, client, file)
+res, err := ovrin.Extract[Invoice](ctx, client, ovrin.File("invoice.pdf"))
 if err != nil {
     return err                              // unreadable, no provider, limit hit
 }

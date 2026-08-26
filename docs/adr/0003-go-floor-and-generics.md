@@ -1,6 +1,6 @@
 # ADR-0003: Go 1.22 floor, and `Extract[T]` is a package-level function
 
-**Status:** Accepted · **Date:** 2026-08-26
+**Status:** Accepted · **Date:** 2026-08-26 · **Amended by** [ADR-0026](0026-extract-takes-per-call-options.md)
 
 ## Context
 
@@ -39,7 +39,7 @@ declared floor and the newest release (rule
 The entry point is a package-level generic function:
 
 ```go
-func Extract[T any](ctx context.Context, c *Client, src Source) (*Result[T], error)
+func Extract[T any](ctx context.Context, c *Client, src Source, opts ...Option) (*Result[T], error)
 ```
 
 The client is a parameter, not a receiver. `Result[T]` is a generic type, which
@@ -59,7 +59,9 @@ breaking anyone.
 **Bad.** `Extract` cannot be discovered by typing `client.` in an editor, which
 is how most people find API. Options are configured on the client but the type
 parameter is on the function, so the two halves of a call are specified in two
-different places. And the signature has three parameters where two would do.
+different places. And the signature has three parameters where two would do —
+four once per-call options are admitted, which [ADR-0026](0026-extract-takes-per-call-options.md)
+subsequently did.
 
 ## Alternatives considered
 

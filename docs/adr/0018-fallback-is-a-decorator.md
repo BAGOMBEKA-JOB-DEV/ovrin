@@ -40,10 +40,11 @@ one provider and cannot tell the difference.
 
 Behaviour, which is the part worth pinning down:
 
-- Advance on `ErrRateLimit`, `ErrServer`, `ErrUnavailable` and unclassified
-  transport errors. **Never** on `ErrAuth`, `ErrBadRequest` or
-  `ErrUnsupported` — a misconfigured credential should fail loudly on the first
-  provider, not silently degrade to the third.
+- Advance on `ErrRateLimit`, `ErrUnavailable` and unclassified transport
+  errors. **Never** on `ErrAuth`, `ErrBadRequest`, `ErrUnsupported` or
+  `ErrSchema` — a misconfigured credential should fail loudly on the first
+  provider, not silently degrade to the third. See
+  [ADR-0027](0027-twelve-sentinels-and-one-op-vocabulary.md).
 - Every attempt is reported through the hook
   ([ADR-0021](0021-observability.md)) with the provider name and the error.
   Silent degradation is the failure mode that makes fallback dangerous: a

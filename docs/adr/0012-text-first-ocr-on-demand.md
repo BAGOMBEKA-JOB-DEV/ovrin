@@ -1,6 +1,6 @@
 # ADR-0012: Text first, OCR on demand, vision as a distinct reading
 
-**Status:** Accepted · **Date:** 2026-08-26
+**Status:** Accepted · **Date:** 2026-08-26 · **Amended by** [ADR-0028](0028-reading-and-readingmode.md)
 
 ## Context
 
@@ -57,7 +57,7 @@ Three properties of this that matter more than the order:
 go through the same normalisation, prompting and validation as OCR text. It is
 another way to acquire content, not a bypass around the pipeline.
 
-**The caller can override.** `WithReading(ovrin.ReadingVision)` forces a
+**The caller can override.** `WithReading(ovrin.ModeVision)` forces a
 specific strategy. The default is adaptive; a caller who knows their corpus can
 do better than the default and should be allowed to.
 
@@ -65,7 +65,7 @@ do better than the default and should be allowed to.
 running both is what makes cross-validation possible
 ([ADR-0014](0014-cross-validation.md)) — which is the strongest quality signal
 ovrin has. It costs twice as much, so it is opt-in via
-`WithReading(ovrin.ReadingBoth)`, not the default.
+`WithReading(ovrin.ModeBoth)`, not the default.
 
 ## Consequences
 
@@ -102,7 +102,7 @@ claimed to be optimal.
   layer in favour of an approximation, and makes a renderer mandatory.
 - **Always run every available reading and merge.** Rejected as a default:
   best accuracy, worst cost, on every document including the easy ones.
-  Available as `ReadingBoth`.
+  Available as `ModeBoth`.
 - **Let the caller choose, with no default.** Rejected: forces every user to
   understand the trade-off before their first extraction. The default should be
   the right answer for someone who has not read this ADR.
