@@ -932,7 +932,7 @@ func checkNoGoroutineLeaks(t *testing.T) func() {
 		deadline := time.Now().Add(leakSettleTimeout)
 		var after int
 		for {
-			after = runtime.NumGoroutine()
+			after = adapterGoroutines()
 			if after <= before {
 				return
 			}
@@ -956,11 +956,11 @@ func checkNoGoroutineLeaks(t *testing.T) func() {
 // closing reads low, and the next test is blamed for the difference.
 func stableGoroutineCount() int {
 	deadline := time.Now().Add(leakSettleTimeout)
-	prev := runtime.NumGoroutine()
+	prev := adapterGoroutines()
 
 	for time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
-		cur := runtime.NumGoroutine()
+		cur := adapterGoroutines()
 		if cur == prev {
 			return cur
 		}
@@ -971,6 +971,56 @@ func stableGoroutineCount() int {
 
 // interestingStacks renders the goroutine dump with the runtime's own
 // bookkeeping removed, so the report shows the leak rather than the scheduler.
+// adapterGoroutines counts the goroutines that could plausibly belong to the
+// adapter under test.
+//
+// runtime.NumGoroutine counts everything in the process, and in a suite built
+// on httptest that includes the *server* side of every connection: a
+// net/http.(*conn).serve parked reading the next request on a keep-alive
+// connection, which exits only when the server closes — in t.Cleanup, after
+// this check has run. Abandoning a request mid-flight kills its connection, so
+// the next request opens a new one and a new server handler with it, and the
+// count moves for reasons that have nothing to do with the adapter.
+//
+// Counting stacks and excluding the test server's own is the difference
+// between a test that measures the adapter and one that measures net/http.
+func adapterGoroutines() int {
+	buf := make([]byte, 1<<20)
+	buf = buf[:runtime.Stack(buf, true)]
+
+	n := 0
+	for _, stack := range strings.Split(string(buf), "\n\n") {
+		if stack == "" || isRuntimeNoise(stack) || isTestServer(stack) {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// isTestServer reports whether a stack belongs to the httptest server rather
+// than to the code under test.
+func isTestServer(stack string) bool {
+	for _, marker := range testServerFrames {
+		if strings.Contains(stack, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// testServerFrames names the server side of net/http, which the suite owns and
+// tears down itself.
+//
+// Deliberately narrow, for the same reason runtimeNoise is: a marker broad
+// enough to match "anything in net/http" would also match the client-side
+// goroutine an adapter genuinely leaks, and hide the bug this is hunting.
+var testServerFrames = []string{
+	"net/http.(*conn).serve",
+	"net/http.(*Server).Serve",
+	"net/http/httptest.",
+}
+
 func interestingStacks() string {
 	buf := make([]byte, 1<<20)
 	buf = buf[:runtime.Stack(buf, true)]
