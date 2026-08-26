@@ -782,8 +782,8 @@ func TestAuthentication(t *testing.T) {
 	t.Run("a token source is sent instead of the key", func(t *testing.T) {
 		t.Parallel()
 
-		p, rec := serve(t, reply{body: successBody()})
-		p = New(rec.base, testKey, WithPollInterval(time.Millisecond),
+		_, rec := serve(t, reply{body: successBody()})
+		p := New(rec.base, testKey, WithPollInterval(time.Millisecond),
 			WithTokenSource(func(context.Context) (string, error) {
 				return "eyJ0eXAiOiJKV1Qi.token", nil
 			}))
@@ -805,8 +805,8 @@ func TestAuthentication(t *testing.T) {
 	t.Run("a token source that fails is an authentication failure", func(t *testing.T) {
 		t.Parallel()
 
-		p, rec := serve(t, reply{body: successBody()})
-		p = New(rec.base, "", WithTokenSource(func(context.Context) (string, error) {
+		_, rec := serve(t, reply{body: successBody()})
+		p := New(rec.base, "", WithTokenSource(func(context.Context) (string, error) {
 			return "", errors.New("no credentials found")
 		}))
 
@@ -1106,8 +1106,8 @@ func TestPageConfidenceIsDerivedAndSaysSo(t *testing.T) {
 func TestLocaleReachesTheWire(t *testing.T) {
 	t.Parallel()
 
-	p, rec := serve(t, reply{body: successBody()})
-	p = New(rec.base, testKey, WithLocale("ja"), WithModel("prebuilt-layout"),
+	_, rec := serve(t, reply{body: successBody()})
+	p := New(rec.base, testKey, WithLocale("ja"), WithModel("prebuilt-layout"),
 		WithAPIVersion("2023-07-31"))
 
 	if _, err := p.Recognise(context.Background(), testPage()); err != nil {

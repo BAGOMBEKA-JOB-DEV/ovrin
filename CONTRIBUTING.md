@@ -4,9 +4,11 @@ Thank you for considering it. This document covers the mechanics. The
 engineering standard is [`docs/rules.md`](docs/rules.md), and review will
 enforce it.
 
-> **Ovrin is documentation-only right now.** There is no Go source yet. The
-> most valuable contributions today are corpus documents, review of the design,
-> and disagreement with an ADR that is wrong.
+> **Ovrin is pre-v1.** The library is implemented and every feature on the
+> roadmap through v0.3 exists; what v1.0 waits on is evidence rather than code
+> ([ADR-0024](docs/adr/0024-versioning-and-stability.md)). The most valuable
+> contributions today are corpus documents, provider adapters, and
+> disagreement with an ADR that is wrong.
 
 ---
 
@@ -15,19 +17,29 @@ enforce it.
 ```bash
 git clone https://github.com/BAGOMBEKA-JOB-DEV/ovrin.git
 cd ovrin
-git config core.hooksPath .githooks    # adds Signed-off-by automatically
+make setup      # sign-off hook, then golangci-lint and govulncheck at CI's versions
+make check      # the whole gate, across all nine modules
 ```
 
-You need Go 1.22 or newer. Once there is code:
+`make` on its own lists every target. You need Go 1.22 or newer to build;
+`make check` additionally wants `golangci-lint` and `govulncheck`, which
+`make setup` installs.
+
+**No credentials are required to build, test or contribute.** That is
+deliberate ([ADR-0022](docs/adr/0022-offline-testing.md)) — the default suite
+runs entirely against in-process fakes and loopback servers, offline.
+
+If you would rather not install a toolchain at all, there is a container with
+all of it pinned:
 
 ```bash
-go build ./...
-go test -race ./...
-go test -race -tags=sandbox ./...
+make docker-ci        # the whole gate, in Docker
+make docker-shell     # a shell with the toolchain, your checkout mounted
 ```
 
-No credentials are required to build, test or contribute. That is deliberate
-([ADR-0022](docs/adr/0022-offline-testing.md)).
+The container is worth knowing about for one more reason: it ships Tesseract's
+English language data, so the six engine-backed tests in `ocr/tesseract` that
+skip on most machines actually run there.
 
 ---
 
@@ -82,20 +94,32 @@ rejects unsigned commits. There is no contributor licence agreement
 ## Before you open a pull request
 
 ```bash
-gofmt -l .                              # must print nothing
-go build ./...
-go vet ./...
-go vet -tags=sandbox ./...
-go vet -tags=integration ./...
-go test -count=1 -race ./...
-go test -count=1 -race -tags=sandbox ./...
-go mod tidy && git diff --exit-code
-golangci-lint run
-govulncheck ./...
+make check
 ```
 
-Repeat for each module you touched. CI does the same, per module, at both the
-module's declared Go floor and the newest release.
+That is the whole gate: `gofmt`, build, `go vet` under every build tag, the
+test suite with the race detector, the same again over real sockets against
+the adversarial fake, `go mod tidy` leaving no diff, `golangci-lint`,
+`govulncheck`, and the documentation checks — across **every module**, so
+there is nothing to repeat by hand.
+
+`make ci` adds what only CI used to do: the coverage floor, the
+zero-dependency assertion and the cgo-free cross-compile.
+
+CI runs these very targets ([`ci.yml`](.github/workflows/ci.yml)) at both each
+module's declared Go floor and the newest release. That is the point of the
+Makefile — the gate and the description of the gate cannot drift apart when
+there is only one of them. If you find yourself typing a `go` command that no
+target covers, add the target.
+
+Individual pieces, when you want a faster loop:
+
+```bash
+make test                 # just the offline suite
+make lint                 # just golangci-lint
+make build MODULES=otel   # one module, the way CI's matrix does it
+make                      # list every target
+```
 
 ---
 

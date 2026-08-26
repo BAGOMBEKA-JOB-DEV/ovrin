@@ -1,0 +1,91 @@
+# Convenience wrappers around the Dockerfile's stages.
+#
+# Every service runs a Makefile target, because the Makefile is where the
+# commands are defined. Nothing here restates a command.
+#
+#   docker compose run --rm ci        # the whole gate
+#   docker compose run --rm dev       # a shell, repo mounted
+#   docker compose run --rm example   # needs OPENAI_API_KEY
+#
+# Credentials are passed through from your environment and never written into
+# an image or a layer.
+
+services:
+  # The gate, on the source as it is in the image.
+  ci:
+    build:
+      context: .
+      target: ci
+    volumes:
+      - gomod:/go/pkg/mod
+      - gobuild:/root/.cache/go-build
+    command: ["make", "ci"]
+
+  # The same, with networking removed.
+  #
+  # docs/validating.md says the default suite makes no network calls: every
+  # test uses an in-process fake or an httptest server on loopback, which a
+  # container still has with no network at all. This turns that claim from a
+  # sentence into something that either passes or does not.
+  ci-offline:
+    build:
+      context: .
+      target: ci
+    network_mode: none
+    volumes:
+      - gomod:/go/pkg/mod
+      - gobuild:/root/.cache/go-build
+    command: ["make", "test", "test-sandbox"]
+
+  # A shell with the toolchain, working on your actual checkout. Edits inside
+  # the container are edits to your tree.
+  dev:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/src
+      - gomod:/go/pkg/mod
+      - gobuild:/root/.cache/go-build
+    environment:
+      - OPENAI_API_KEY
+      - OPENAI_BASE_URL
+      - OVRIN_MODEL
+      - OVRIN_EVAL_MODEL
+    stdin_open: true
+    tty: true
+
+  example:
+    build:
+      context: .
+      target: example
+    environment:
+      - OPENAI_API_KEY
+      # model/skyl can talk to a local Ollama, but its default base URL is
+      # http://localhost:11434/v1 — which inside a container is the
+      # container's own loopback, not yours. Point OPENAI_BASE_URL at
+      # http://host.docker.internal:11434/v1 (or use network_mode: host) if
+      # that is what you want.
+      - OPENAI_BASE_URL
+      - OVRIN_MODEL
+    volumes:
+      - gomod:/go/pkg/mod
+      - gobuild:/root/.cache/go-build
+
+  eval:
+    build:
+      context: .
+      target: eval
+    environment:
+      - OPENAI_API_KEY
+      - OPENAI_BASE_URL
+      - OVRIN_EVAL_MODEL
+    volumes:
+      # Mounted out so a run you paid for leaves its report behind.
+      - ./eval/report:/src/eval/report
+      - gomod:/go/pkg/mod
+      - gobuild:/root/.cache/go-build
+
+volumes:
+  gomod:
+  gobuild:

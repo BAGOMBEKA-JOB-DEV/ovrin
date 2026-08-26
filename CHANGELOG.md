@@ -180,6 +180,35 @@ prefix. Entries below say which module they affect where it is not the core.
   [ADR-0009](docs/adr/0009-ocr-seam.md) carries a note, since this reverses a
   cost that ADR accepted.
 
+- **A `Makefile`, and CI that calls it.** Every command this repository runs is
+  now a target — `make` on its own lists them — and
+  [`ci.yml`](.github/workflows/ci.yml) invokes those targets rather than
+  restating the commands. `make check` is the contributor gate; `make ci` adds
+  the coverage floor, the zero-dependency assertion and the cgo-free
+  cross-compile.
+
+  The command set previously existed in four places: `CONTRIBUTING.md`,
+  `AGENTS.md`, the pull-request template and the workflow. They are now one
+  definition and three references to it, and `scripts/check-docs.py` fails the
+  build if the README and the Makefile disagree about which targets exist.
+
+- **Docker.** `make docker-ci` runs the whole gate in a container pinning Go,
+  Python, `golangci-lint` and `govulncheck`. `make docker-shell` gives a shell
+  with the toolchain and your checkout mounted.
+
+  The image installs Tesseract's English language data, which makes the six
+  engine-backed tests in `ocr/tesseract` run instead of skipping — they had
+  never run anywhere, including in CI. `make docker-test-offline` runs the
+  suite with `--network=none`, turning `docs/validating.md`'s claim that the
+  default suite needs no network into something that either passes or does not.
+
+- **`make release-check VERSION=vX.Y.Z`.** `RELEASING.md` documented
+  `scripts/release.sh` in detail; the file never existed. The target does what
+  that section described — checks the tree is clean, the tag is free, the
+  changelog has a section, no module carries a `replace` directive and no
+  dependency sits at a bare `v0.0.0` — and, as documented, never tags and never
+  pushes.
+
 ### Fixed
 
 - A source file that does not exist, or cannot be read, is now `ErrNoContent`
@@ -193,6 +222,28 @@ prefix. Entries below say which module they affect where it is not the core.
 - `ocr/google`, `model/skyl`, `otel`, `render/pdfium` and `examples/receipt`
   could not be built outside the development workspace, which is how CI builds
   them.
+
+- `render/pdfium`'s cancellation test timed the *first* render, which compiles
+  four megabytes of WebAssembly — around eighteen seconds under `-race` against
+  a warm render's one. It sized its cancellation window from that, cancelled
+  long after the render had finished, and then failed claiming cancellation was
+  ignored. It now times a warm render, which is what it always meant to.
+
+- Nine lint findings across four modules, none of which had ever been reported
+  because `golangci-lint` had not been run: three ineffectual assignments in
+  `ocr/azure`, a comment in `ocr/tesseract` that read as a malformed
+  `go:embed` directive, an error compared with `!=` instead of `errors.Is` in
+  `ocr/textract`, a field-by-field struct literal that should be a conversion,
+  and three unchecked error returns in `render/pdfium` that were deliberate but
+  did not say so.
+
+- `.github/dependabot.yml` was missing `/ocr/azure`, `/ocr/textract` and
+  `/examples/receipt` — three of the nine modules got no dependency updates.
+  The file's own comment warned that CI would not catch this.
+
+- `go build ./...` inside `examples/receipt` wrote a 9MB binary into the tree,
+  which is how one reached git six times. `make build` uses `-o /dev/null`:
+  the same compile and link, without the output.
 
 ### Notes
 

@@ -438,12 +438,21 @@ func TestCancellationDuringRender(t *testing.T) {
 		}
 	}()
 
-	// Warm the runtime, and find out how long an uncancelled render of this
-	// page takes, so the assertion below is relative to this machine rather
-	// than to a number guessed on another one.
-	start := time.Now()
+	// Warm the runtime first, then time a second render.
+	//
+	// Both steps matter. The first Render compiles four megabytes of
+	// WebAssembly, and timing *that* one measures the compilation this test
+	// is trying to exclude: under -race the cold call takes around eighteen
+	// seconds against a warm one's one second. Sizing the cancellation window
+	// from the cold number means cancelling long after the render has already
+	// finished, and the test then fails claiming cancellation was ignored
+	// when nothing was ever cancelled.
 	if _, err := r.Render(context.Background(), doc, 1, 900); err != nil {
 		t.Fatalf("warming: %v", err)
+	}
+	start := time.Now()
+	if _, err := r.Render(context.Background(), doc, 1, 900); err != nil {
+		t.Fatalf("timing a warm render: %v", err)
 	}
 	full := time.Since(start)
 	if full < 100*time.Millisecond {

@@ -546,10 +546,10 @@ effects. Two clients in one process cannot observe each other
 Three tiers ([ADR-0022](adr/0022-offline-testing.md)):
 
 ```bash
-go test ./...                    # in-process. fast, free, offline
-go test -tags=sandbox ./...      # full stack over real sockets, no credentials
-go test -tags=integration ./...  # real providers, real money
-go test -tags=eval ./eval/...    # accuracy against the corpus  ADR-0023
+make test              # in-process. fast, free, offline
+make test-sandbox      # full stack over real sockets, no credentials
+make test-integration  # real providers, real money
+make eval              # accuracy against the corpus  ADR-0023
 ```
 
 Correctness is a unit test. **Accuracy is not** — it is a distribution measured
