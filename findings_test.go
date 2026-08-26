@@ -177,7 +177,7 @@ func findingCases() []findingCase {
 	// character. A literal U+202E in source reorders the line for whoever
 	// reads it next — which is the same property that makes it worth
 	// detecting — and staticcheck refuses it besides.
-	const rtlOverride = "‮"
+	const rtlOverride = "\u202e"
 
 	// Instruction-shaped metadata reaches internal/normalise only from a PDF
 	// information dictionary: it is the one reading that carries metadata at

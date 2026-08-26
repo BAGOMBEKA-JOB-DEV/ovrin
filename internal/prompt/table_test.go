@@ -3,8 +3,6 @@ package prompt
 import (
 	"strings"
 	"testing"
-
-	"github.com/BAGOMBEKA-JOB-DEV/ovrin/internal/schema"
 )
 
 // invoiceTable is the table the rendering tests work against.
@@ -346,7 +344,7 @@ func TestAPageWithATableAndAnImageIsRefused(t *testing.T) {
 func TestTablesNeverReachTheInstruction(t *testing.T) {
 	t.Parallel()
 
-	var s schema.Schema = testSchema()
+	s := testSchema()
 	plain := Instruction(s)
 
 	req, err := Build(s, testJSONSchema, []PageContent{{
