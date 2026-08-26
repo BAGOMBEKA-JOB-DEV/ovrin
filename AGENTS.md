@@ -8,11 +8,13 @@ validated, typed Go structs with per-field confidence and provenance. It is a
 public, Apache-2.0, pre-v1 open-source library that other people's production
 systems will depend on.
 
-**Status check (read before assuming).** As of 2026-08-26 this repository
-contains **documentation only**. There is no `go.mod`, no Go source and no
-release. If you find code here, this paragraph is stale — check
-[`docs/project-plan.md`](docs/project-plan.md) for current state before
-trusting anything else in this file.
+**Status check (read before assuming).** The library is implemented: nine Go
+modules, the core with zero dependencies, and every roadmap feature through
+v0.3. There is no release tag yet, so the `require` lines in each adapter's
+`go.mod` name versions that do not exist and are pointed at the checkout with
+`replace` directives. v1.0 waits on evidence, not code
+([ADR-0024](docs/adr/0024-versioning-and-stability.md)). Check
+[`docs/roadmap.md`](docs/roadmap.md) for current state.
 
 **Precedence.** If this file conflicts with something in `docs/`, this file
 wins for *conventions* and `docs/` wins for *decisions*. An ADR beats both.
@@ -170,20 +172,19 @@ ovrin/                     module github.com/BAGOMBEKA-JOB-DEV/ovrin
 6. **Run the local gate:**
 
    ```bash
-   gofmt -l .                     # must print nothing
-   go build ./...
-   go vet ./...
-   go vet -tags=sandbox ./...
-   go vet -tags=integration ./...
-   go test -count=1 -race ./...
-   go test -count=1 -race -tags=sandbox ./...
-   go mod tidy && git diff --exit-code    # must be clean
-   golangci-lint run
-   govulncheck ./...
+   make check
    ```
 
-   Repeat per module. CI runs each module at its declared Go floor **and** at
-   the newest release.
+   That is `gofmt`, build, `go vet` under every build tag, the race-enabled
+   suite, the same over real sockets, `go mod tidy` leaving no diff,
+   `golangci-lint`, `govulncheck` and the documentation checks — for every
+   module. `make ci` adds the coverage floor, the zero-dependency assertion
+   and the cgo-free cross-compile.
+
+   The commands live in the [`Makefile`](Makefile) and nowhere else; CI calls
+   those same targets, at each module's declared Go floor **and** the newest
+   release. Do not paste a `go` command into a doc or a workflow — add a
+   target and call it, or the gate and its description start drifting.
 
 7. **Commit** with a Conventional Commit subject and `-s` to sign off.
 

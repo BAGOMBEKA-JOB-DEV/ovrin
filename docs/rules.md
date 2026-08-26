@@ -322,6 +322,14 @@ old one superseded.
 
 ## 11. Formatting and tooling
 
+**11.0 — Every command in this section is a `make` target, and that is the
+only place it is written down.** `make check` runs 11.1 through 11.5 across
+every module; `make ci` adds the coverage floor (§3.7), the zero-dependency
+assertion (§4.1) and the cgo-free cross-compile (§4.3). CI calls those same
+targets rather than restating the commands, so the gate and every description
+of the gate cannot disagree. If a rule here needs a command that no target
+runs, add the target — do not paste the command into a document or a workflow.
+
 **11.1 — `gofmt` is the formatter and CI fails on unformatted code.** No
 opinions, no `.editorconfig` arguments.
 

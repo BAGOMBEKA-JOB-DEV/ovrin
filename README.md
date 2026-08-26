@@ -81,7 +81,32 @@ go get github.com/BAGOMBEKA-JOB-DEV/ovrin/render/pdfium   # v0.2 — rasterise s
 go get github.com/BAGOMBEKA-JOB-DEV/ovrin/otel            # v0.2 — OpenTelemetry
 ```
 
-Go 1.22 or newer.
+Go 1.22 or newer. (That is a *language* floor. For the toolchain to build
+with, see [SECURITY.md](SECURITY.md#which-go-toolchain-you-need).)
+
+## Development
+
+Every command this repository runs is a `make` target, and CI calls those same
+targets — so a green run here is a green run there.
+
+```bash
+make            # list every target
+make setup      # sign-off hook, plus golangci-lint and govulncheck at CI's versions
+make check      # the gate: fmt, build, vet under every tag, tests, lint, vuln, docs
+make ci         # the above, plus coverage floor, zero-dependency and cross-compile checks
+```
+
+Or run it all in a container, with the Go, Python and linter versions pinned
+and nothing to install:
+
+```bash
+make docker-ci      # the whole gate, in Docker
+make docker-shell   # a shell with the toolchain, your checkout mounted
+```
+
+No credentials are needed to build or test. The default suite is entirely
+offline — in-process fakes and loopback servers — which
+`make docker-test-offline` proves by running it with no network at all.
 
 ## Inputs
 
@@ -187,16 +212,16 @@ Contributors and coding agents should start with [`AGENTS.md`](AGENTS.md).
 
 ## Status
 
-**Pre-v1, and pre-code.** This repository currently contains the design: 25
-architecture decision records, a specification of the pipeline, the schema
-grammar, the confidence model and the threat model. Implementation has not
-started.
+**Pre-v1.** The library is implemented — nine Go modules, the core with zero
+dependencies, and every feature on the roadmap through v0.3 — on top of thirty
+architecture decision records that were written before the code.
 
 What that means concretely:
 
-- **No release exists.** The install commands above will not work yet.
-- **The Go API shown here is a specification, not a description.** It will
-  change as it meets real documents.
+- **No release is tagged yet.** The install commands above will not resolve
+  until one is. Until then, build from a checkout.
+- **The API is described, not specified, but it is not stable.** It will change
+  as it meets real documents.
 - **No accuracy figure has been published**, and none will be until the
   evaluation harness can reproduce it ([ADR-0023](docs/adr/0023-evaluation-corpus.md)).
 - **Confidence weights are provisional.** Confidence is a ranking signal today,

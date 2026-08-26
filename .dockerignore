@@ -1,0 +1,73 @@
+# What not to send to the Docker daemon as build context.
+#
+# This is deliberately NOT a copy of .gitignore, for two reasons that would
+# each cause a quiet failure:
+#
+#   1. Docker patterns are anchored to the context root; git's match at any
+#      depth. `*.out` here means only a *.out beside this file, so every
+#      pattern below that should match anywhere carries an explicit `**/`.
+#
+#   2. .gitignore excludes `testdata/fuzz/`, and this file deliberately does
+#      NOT. One fuzz seed is tracked — internal/pdf/testdata/fuzz/FuzzPDF/
+#      fc7a8f950c971d7f, force-added past that rule — and a corpus entry the
+#      fuzzer finds locally would land in that same directory. No pattern can
+#      tell the two apart, so excluding the directory would cost internal/pdf
+#      its seed. A few kilobytes of build context is the cheaper mistake.
+#
+# What must NOT be excluded, because the root module's tests read the working
+# tree by relative path:
+#
+#   docs/          explain_golden_test.go reads docs/explainability.md and
+#                  FAILS rather than skips when it is missing;
+#                  defaults_doc_test.go parses docs/confidence.md
+#   api/           api_test.go reads api/ovrin.txt
+#   eval/corpus/   extract_test.go and render/pdfium's benchmarks read it
+#   testdata/      the root PDF fixtures
+#
+# A lean "source only" ignore file turns several tests red and several others
+# into silent skips, which is worse.
+
+# The big one: 39MB of a 54MB tree, against ~5MB of tracked content.
+.git
+.gitattributes
+
+# Local build and test output.
+**/receipt
+!examples/receipt/receipt.png
+.bin/
+bin/
+dist/
+**/*.exe
+**/*.dll
+**/*.so
+**/*.dylib
+**/*.test
+**/*.out
+**/coverage.*
+
+# Evaluation output is generated, and the local variants are gitignored.
+eval/report/*.local.*
+
+# The Go workspace is local to each contributor and points outside this
+# repository. The image sets GOWORK=off, but not copying it in the first place
+# means there is nothing to ignore.
+go.work
+go.work.sum
+
+# Editors and OS noise.
+.vscode/
+.idea/
+**/*.swp
+**/*~
+**/.DS_Store
+
+# Credentials never enter an image.
+.env
+.env.*
+
+# Docker's own files are not needed inside the image.
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Note the absence of a testdata/fuzz rule here — see point 2 at the top.

@@ -3,9 +3,10 @@
 You are considering a dependency for something that matters. This document is
 the honest version of "should you".
 
-> **Ovrin is not implemented.** Today the answer is no: there is nothing to
-> adopt. What follows is how to assess it when there is, and what to hold it
-> to.
+> **Ovrin is implemented but unreleased, and has not been used in production
+> by anyone outside the project.** That, not the state of the code, is the
+> reason to be cautious today. What follows is how to assess it, and what to
+> hold it to.
 
 ---
 
@@ -25,21 +26,31 @@ the honest version of "should you".
 
 ## Check the claims yourself
 
-**Zero dependencies.** Not "few". Verify:
+Each of these is a `make` target, so you are running the same check CI runs
+rather than a paraphrase of it.
+
+**Zero dependencies.** Not "few":
 
 ```bash
-go mod graph | grep -v '^github.com/BAGOMBEKA-JOB-DEV/ovrin' | head
-# expect nothing for the core module
+make deps-check     # go list -deps, expecting nothing outside the standard library
 ```
 
 **No cgo.** The property most likely to be quietly broken by a dependency:
 
 ```bash
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
+make cross          # CGO_ENABLED=0, for linux/arm64, darwin/arm64 and windows/amd64
 ```
 
-**No network in the default test suite.** Run it with networking disabled. It
-should pass ([ADR-0022](adr/0022-offline-testing.md)).
+**No network in the default test suite** ([ADR-0022](adr/0022-offline-testing.md)).
+Do not take this one on trust — run it with the network removed:
+
+```bash
+make docker-test-offline    # the suite in a container started with --network=none
+```
+
+Everything the tests need is an in-process fake or an `httptest` server on
+loopback, which a container has even with no network at all. If a provider call
+ever leaked into the default suite, this is what would catch it.
 
 **Errors carry no document content.** Feed it a document with a distinctive
 string, force a failure, and grep the error. This is asserted by the contract

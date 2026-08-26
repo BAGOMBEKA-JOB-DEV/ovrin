@@ -3,9 +3,10 @@
 # Every non-obvious choice below has a comment explaining the failure it
 # prevents. A CI file nobody understands is a CI file people disable.
 #
-# NOTE: this repository currently contains documentation only. The Go jobs are
-# written and will do nothing useful until there is a go.mod. The docs job
-# works today and is the one that matters right now.
+# Every step below calls a Makefile target rather than restating a command.
+# The Makefile is the single definition: `make ci` locally runs what this file
+# runs, because this file runs `make`. Two copies of one command set is how a
+# gate and its documentation drift apart.
 
 name: CI
 
@@ -48,7 +49,7 @@ jobs:
       # hygiene, ovrin.X references against api/ovrin.txt, layout-tree
       # agreement, and fence markers.
       - name: check documentation
-        run: python3 scripts/check-docs.py
+        run: make docs
 
   # Every module in the repository, found rather than listed.
   #
@@ -112,49 +113,29 @@ jobs:
             ${{ matrix.module }}/go.mod
             ${{ matrix.module }}/go.sum
 
+      # MODULES overrides the Makefile's discovery so each matrix leg does
+      # exactly its own module, while the command itself stays defined once.
       - name: gofmt
-        working-directory: ${{ matrix.module }}
-        run: |
-          out=$(gofmt -l .)
-          if [ -n "$out" ]; then
-            echo "$out" | while read -r f; do echo "::error file=$f::not gofmt'd"; done
-            exit 1
-          fi
+        run: make fmt-check MODULES=${{ matrix.module }}
 
       - name: build
-        working-directory: ${{ matrix.module }}
-        run: go build ./...
+        run: make build MODULES=${{ matrix.module }}
 
       # Tagged files are real code. Vetting only the untagged build lets them
       # rot until someone runs the tagged suite months later.
       - name: vet
-        working-directory: ${{ matrix.module }}
-        run: |
-          go vet ./...
-          go vet -tags=sandbox ./...
-          go vet -tags=integration ./...
-          go vet -tags=eval ./...
+        run: make vet MODULES=${{ matrix.module }}
 
       # -count=1 defeats the test cache; a cached pass proves nothing about
       # this commit. The sandbox tag exercises the full stack over real
       # sockets without credentials or cost.
       - name: test
-        working-directory: ${{ matrix.module }}
-        run: |
-          go test -count=1 -race -tags=sandbox \
-            -coverpkg=./... -covermode=atomic -coverprofile=cover.out ./...
+        run: make test-cover MODULES=${{ matrix.module }}
 
+      # docs/rules.md §3.7 — never lower this to make a red build green.
       - name: coverage floor
-        if: matrix.module == '.' && matrix.go == '1.27' 
-        working-directory: ${{ matrix.module }}
-        run: |
-          # Test-support packages inflate the number without testing anything.
-          grep -vE '/internal/(adaptertest|sandbox|testutil)/' cover.out > c.out
-          pct=$(go tool cover -func=c.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
-          echo "coverage ${pct}% (floor 85%)"
-          # docs/rules.md §3.7 — never lower this to make a red build green.
-          awk -v p="$pct" -v f="85" \
-            'BEGIN { if (p+0 < f+0) { print "::error::coverage below floor"; exit 1 } }'
+        if: matrix.module == '.' && matrix.go == '1.27'
+        run: make cover-floor
 
   tidy:
     name: tidy
@@ -167,11 +148,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
         with: { go-version: "${{ matrix.go }}" }
-      - working-directory: ${{ matrix.module }}
-        run: |
-          go mod tidy
-          git diff --exit-code || {
-            echo "::error::go mod tidy left a diff in ${{ matrix.module }} — commit it"; exit 1; }
+      - run: make tidy-check MODULES=${{ matrix.module }}
 
   deps:
     name: core has zero dependencies
@@ -186,21 +163,12 @@ jobs:
       # accident and hardest to reverse once users depend on it, so it is a
       # job rather than a review comment.
       - name: no external requires
-        run: |
-          if go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./... \
-             | grep -v '^github.com/BAGOMBEKA-JOB-DEV/ovrin' | grep .; then
-            echo "::error::the core module must have zero external dependencies"
-            exit 1
-          fi
+        run: make deps-check
 
       # docs/rules.md §4.3. Static builds and cross-compilation are why a lot
       # of people choose Go, and a transitive cgo dependency breaks both.
       - name: builds without cgo, cross-compiled
-        env: { CGO_ENABLED: "0" }
-        run: |
-          GOOS=linux   GOARCH=arm64 go build ./...
-          GOOS=darwin  GOARCH=arm64 go build ./...
-          GOOS=windows GOARCH=amd64 go build ./...
+        run: make cross
 
   lint:
     name: lint
@@ -229,9 +197,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
         with: { go-version: "${{ env.GO_VERSION }}" }
-      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-      - working-directory: ${{ matrix.module }}
-        run: govulncheck ./...
+      # The version is pinned in the Makefile, so it is pinned once.
+      - run: make tools-vuln
+      - run: make vuln MODULES=${{ matrix.module }}
 
   # The single check branch protection requires. Naming each job in the
   # repository settings means that list silently goes stale every time a

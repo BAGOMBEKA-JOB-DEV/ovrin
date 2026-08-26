@@ -2,8 +2,9 @@
 
 Ovrin turns documents into typed Go values. This directory holds the design.
 
-**The repository currently contains documentation only.** Implementation has
-not started; see the [status section](../README.md#status).
+**The library is implemented; no release is tagged yet.** See the
+[status section](../README.md#status). This directory holds the design that
+came first, and the documentation checks keep it honest about the code.
 
 ## Guides
 

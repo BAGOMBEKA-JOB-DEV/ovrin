@@ -17,13 +17,11 @@
 Each item cites the rule it comes from. If one does not apply, say why rather
 than deleting it.
 
-- [ ] `gofmt -l .` prints nothing — [§11.1](../docs/rules.md#11-formatting-and-tooling)
-- [ ] `go vet ./...` passes under every build tag — [§11.2](../docs/rules.md#11-formatting-and-tooling)
-- [ ] `go test -race` and `-tags=sandbox` pass in every module I touched — [§3.3](../docs/rules.md#3-testing)
-- [ ] `go mod tidy` leaves no diff — [§11.4](../docs/rules.md#11-formatting-and-tooling)
-- [ ] `golangci-lint run` and `govulncheck ./...` are clean — [§11.3](../docs/rules.md#11-formatting-and-tooling), [§11.5](../docs/rules.md#11-formatting-and-tooling)
-- [ ] The core module still has zero external dependencies — [§4.1](../docs/rules.md#4-dependencies)
-- [ ] `CGO_ENABLED=0` still builds the core — [§4.3](../docs/rules.md#4-dependencies)
+- [ ] `make check` passes — `gofmt`, build, `go vet` under every build tag,
+      `-race` and `-tags=sandbox`, `go mod tidy`, `golangci-lint`,
+      `govulncheck`, docs — [§11](../docs/rules.md#11-formatting-and-tooling), [§3.3](../docs/rules.md#3-testing)
+- [ ] `make ci` passes — adds the coverage floor, the zero-dependency
+      assertion and the cgo-free cross-compile — [§4.1](../docs/rules.md#4-dependencies), [§4.3](../docs/rules.md#4-dependencies)
 - [ ] No new dependency is AGPL or GPL — [§4.4](../docs/rules.md#4-dependencies)
 - [ ] No document content or credential can reach an error, event or trace — [§2.5](../docs/rules.md#2-errors), [§7.5](../docs/rules.md#7-untrusted-input)
 - [ ] Every new exported symbol has a doc comment saying *why* — [§1.1](../docs/rules.md#1-public-api), [§9.2](../docs/rules.md#9-documentation)

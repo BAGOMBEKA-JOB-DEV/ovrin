@@ -164,13 +164,18 @@ it.
 export OPENAI_API_KEY=…
 export GOOGLE_APPLICATION_CREDENTIALS=…
 
-go test -tags=eval ./eval/... -run TestCorpus
+make eval
 ```
 
 It needs credentials and **costs money**, so it is not part of CI
 ([ADR-0022](adr/0022-offline-testing.md)). Run it before a release, after any
 change to prompting, normalisation, grounding or scoring, and when changing
 provider or model.
+
+`make eval` refuses to start without `OPENAI_API_KEY` rather than skipping
+quietly, because a run you thought you paid for and did not is worse than an
+error. To narrow the run or compare against a previous one, call the suite
+directly — these are flags on the test binary, not targets:
 
 ```bash
 go test -tags=eval ./eval/... -category invoices -difficulty poor-scan
@@ -179,6 +184,12 @@ go test -tags=eval ./eval/... -baseline report/2026-08-26-gpt-5.2-tesseract.json
 
 The `-baseline` form reports the delta, which is the form worth running during
 development.
+
+Two related targets: `make corpus` regenerates the synthetic corpus in place
+(`eval/corpusgen`, deterministic and offline), and `make report` regenerates
+the committed no-run report. `make docker-eval` runs the harness in a
+container, mounting `eval/report` back out so a run you paid for leaves its
+result behind.
 
 ---
 

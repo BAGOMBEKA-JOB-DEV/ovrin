@@ -101,8 +101,16 @@ hooks: ## Enable the commit-message sign-off hook
 	@echo "core.hooksPath = .githooks"
 
 .PHONY: tools
-tools: ## Install golangci-lint and govulncheck at the versions CI pins
+tools: tools-lint tools-vuln ## Install golangci-lint and govulncheck at the versions CI pins
+
+.PHONY: tools-lint
+tools-lint:
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+# Split out so CI's vuln job can install just this one and still take the
+# version from here. Two copies of a pinned version is two things to forget.
+.PHONY: tools-vuln
+tools-vuln:
 	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 
 ##@ Build and test
@@ -265,15 +273,42 @@ check: fmt-check build vet test test-sandbox tidy-check lint vuln docs ## The ga
 ci: check test-cover cover-floor deps-check cross ## Everything CI runs
 	@printf '\n\033[32mci passed\033[0m\n'
 
+# Checks and reports. It never tags and it never pushes.
+#
+# That separation is deliberate and is the reason RELEASING.md gives: a script
+# that both verifies and publishes will eventually publish on the strength of
+# a check that was silently skipped. Tagging stays a thing a person does by
+# hand, having read this output.
+#
+#     make release-check VERSION=v0.2.0
 .PHONY: release-check
-release-check: tidy-check deps-check ## Assert this tree is fit to tag
-	@set -e; for m in $(MODULES); do \
+release-check: ## Report whether this tree is fit to tag. VERSION=v0.2.0
+	@test -n "$(VERSION)" || { echo "usage: make release-check VERSION=v0.2.0"; exit 1; }
+	@fail=0; \
+	if [ -n "$$(git status --porcelain)" ]; then \
+		echo "  FAIL  the working tree is dirty"; fail=1; \
+	else echo "  ok    the working tree is clean"; fi; \
+	if git rev-parse -q --verify "refs/tags/$(VERSION)" >/dev/null; then \
+		echo "  FAIL  tag $(VERSION) already exists"; fail=1; \
+	else echo "  ok    tag $(VERSION) does not exist yet"; fi; \
+	if grep -q '^## \[\?$(VERSION)' CHANGELOG.md 2>/dev/null; then \
+		echo "  ok    CHANGELOG.md has a section for $(VERSION)"; \
+	else echo "  FAIL  CHANGELOG.md has no section for $(VERSION)"; fail=1; fi; \
+	for m in $(MODULES); do \
 		if grep -q '^replace ' "$$m/go.mod"; then \
-			echo "$$m/go.mod has a replace directive; it must come out before tagging"; \
-			exit 1; \
+			echo "  FAIL  $$m/go.mod has a replace directive"; fail=1; \
 		fi; \
-	done
-	@echo "no replace directives; releasable"
+		if grep -qE '^[[:space:]]+[^[:space:]]+ v0\.0\.0([[:space:]]|$$)' "$$m/go.mod"; then \
+			echo "  FAIL  $$m/go.mod pins a v0.0.0 placeholder"; fail=1; \
+		fi; \
+	done; \
+	if [ $$fail -eq 0 ]; then echo "  ok    no replace directives or placeholder versions"; fi; \
+	echo; \
+	if [ $$fail -ne 0 ]; then \
+		echo "not releasable. nothing was tagged and nothing was pushed."; exit 1; \
+	fi; \
+	echo "releasable. tag and push by hand:"; \
+	echo "    git tag -s $(VERSION) -m \"$(VERSION)\" && git push origin main $(VERSION)"
 
 .PHONY: clean
 clean: ## Remove build and coverage output

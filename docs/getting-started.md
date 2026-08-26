@@ -1,8 +1,8 @@
 # Getting started
 
-> **Ovrin has not been implemented yet.** This document specifies the intended
-> experience. Nothing below works today; see the
-> [README's status section](../README.md#status).
+> **Ovrin is implemented but not yet tagged.** The examples below work
+> against a checkout; `go get` will not resolve until there is a release. See
+> the [README's status section](../README.md#status).
 >
 > Sections opening with a **v0.2** or **v0.3** note describe features that will
 > not be in the first release. Everything unmarked is v0.1 scope, and the

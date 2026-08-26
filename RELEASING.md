@@ -40,18 +40,20 @@ $EDITOR CHANGELOG.md
 git commit -s -m "chore: release v0.2.0"
 
 # 3. Check what is about to be released
-./scripts/release.sh v0.2.0
+make release-check VERSION=v0.2.0
 
 # 4. Tag and push, deliberately, by hand
 git tag -s v0.2.0 -m "v0.2.0"
 git push origin main v0.2.0
 ```
 
-`scripts/release.sh` **never creates a tag and never pushes.** It checks and
-reports: the tree is clean, the module builds at its declared floor, no
-`replace` directive is present, no dependency is at a `v0.0.0` placeholder, the
-changelog has a section for this version, and the tag does not already exist.
-It refuses to be the thing that publishes something.
+`make release-check` **never creates a tag and never pushes.** It checks and
+reports: the tree is clean, the tag does not already exist, the changelog has a
+section for this version, no module carries a `replace` directive, and no
+dependency is at a bare `v0.0.0` placeholder. A pseudo-version such as
+`v0.0.0-20231006140011-7918f672742d` is not a placeholder — it pins a commit
+exactly — and is not reported. On success it prints the `git tag` and
+`git push` you would run; it does not run them.
 
 That separation is on purpose. A script that both verifies and publishes will
 eventually publish on the strength of a check that was silently skipped.
