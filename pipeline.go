@@ -747,6 +747,7 @@ func acquirePage(ctx context.Context, cfg *config, doc Document, page int) (prom
 			Number:  page,
 			Reading: prompt.Reading(ReadingOCR),
 			Text:    res.Text,
+			Tables:  promptTables(rec.Layout),
 		}, ReadingOCR, rec.Usage, nil
 	}
 
@@ -807,12 +808,16 @@ func acquireByDocumentOCR(ctx context.Context, cfg *config, d DocumentOCR, doc D
 	meta.Providers[OpOCR] = name
 
 	pages := make([]normalise.Page, 0, len(recs))
+	// Collected alongside pages, not indexed by recs: a nil recognition is
+	// skipped, so recs[i] and pages[i] are not the same page.
+	tables := make([][]prompt.Table, 0, len(recs))
 	for i, rec := range recs {
 		if rec == nil {
 			continue
 		}
 		addUsage(&meta.Usage, rec.Usage)
 		pages = append(pages, normalisePage(i+1, 0, 0, rec))
+		tables = append(tables, promptTables(rec.Layout))
 	}
 
 	nStart := time.Now()
@@ -845,6 +850,36 @@ func acquireByDocumentOCR(ctx context.Context, cfg *config, d DocumentOCR, doc D
 }
 
 // normalisePage converts one Recognition into the shape normalise reads.
+// promptTables converts one page's recognised tables into the shape the prompt
+// stage renders.
+//
+// A provider that reported no structure — or reported some and found none on
+// this page — contributes nothing, and the page's text is sent exactly as it
+// would have been. That is the pointer contract on [Recognition.Layout]
+// arriving where it matters: "nobody looked" and "looked, found nothing" are
+// different facts, and neither of them is a table.
+func promptTables(l *Layout) []prompt.Table {
+	if l == nil || len(l.Tables) == 0 {
+		return nil
+	}
+	out := make([]prompt.Table, 0, len(l.Tables))
+	for _, t := range l.Tables {
+		cells := make([]prompt.Cell, 0, len(t.Cells))
+		for _, c := range t.Cells {
+			cells = append(cells, prompt.Cell{
+				Row:        c.Row,
+				Column:     c.Column,
+				RowSpan:    c.RowSpan,
+				ColumnSpan: c.ColumnSpan,
+				Header:     c.Kind.Header(),
+				Text:       c.Text,
+			})
+		}
+		out = append(out, prompt.Table{Cells: cells})
+	}
+	return out
+}
+
 func normalisePage(number int, width, height float64, rec *Recognition) normalise.Page {
 	words := make([]normalise.Word, 0, len(rec.Words))
 	for _, w := range rec.Words {
