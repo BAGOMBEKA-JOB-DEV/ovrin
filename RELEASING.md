@@ -25,16 +25,19 @@ importable. It gets a tag like everything else. What makes it awkward is that
 it depends on `model/skyl`, which is why the ordering below has three tiers
 rather than two.
 
-## The first release is v0.3.0
+## Why the first release was v0.3.0
 
-There has never been a tag in this repository. The roadmap milestones through
-v0.3 are all complete, so the first tag is **v0.3.0** rather than v0.1.0: the
-version numbers name what is in the release, and pretending otherwise would
-mean shipping three releases in an afternoon to versions nobody ever ran.
+There had never been a tag. The roadmap milestones through v0.3 were all
+complete, so the first tag was **v0.3.0** rather than v0.1.0: version numbers
+name what is in the release, and pretending otherwise would have meant shipping
+three releases in an afternoon to versions nobody ever ran.
 
-The practical consequence is that this is the one release where nothing can be
-verified against a previous one. Read the checks below rather than skimming
-them.
+The seven adapters and `examples/receipt` started at `<path>/v0.1.0` instead,
+because they version independently and it was their first release. A module's
+number describes that module.
+
+That release is done — `v0.3.0`, 2026-09-05. What follows is the procedure for
+the next one, which unlike the first can be verified against a predecessor.
 
 ## Before tagging anything
 

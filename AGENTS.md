@@ -10,9 +10,10 @@ systems will depend on.
 
 **Status check (read before assuming).** The library is implemented: nine Go
 modules, the core with zero dependencies, and every roadmap feature through
-v0.3. There is no release tag yet, so the `require` lines in each adapter's
-`go.mod` name versions that do not exist and are pointed at the checkout with
-`replace` directives. v1.0 waits on evidence, not code
+v0.3, released as `v0.3.0` with the adapters at `<path>/v0.1.0`. The `replace`
+directives that pointed each adapter at the checkout are gone — every module
+now requires a version that exists on the proxy. v1.0 waits on evidence, not
+code
 ([ADR-0024](docs/adr/0024-versioning-and-stability.md)). Check
 [`docs/roadmap.md`](docs/roadmap.md) for current state.
 

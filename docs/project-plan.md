@@ -55,7 +55,6 @@ that is what everything below is about.
 
 | Item | Blocked on | Owner |
 |---|---|---|
-| Tagged releases | A dated `CHANGELOG.md` section and a decision on the first version — `make release-check VERSION=v0.3.0` reports both | maintainer |
 | Any accuracy statement | Every corpus document is synthetic; nothing has been run against a real one | maintainer, contributors |
 | Confidence calibration | A real corpus, then a calibration run | — |
 | v1.0 | All four [ADR-0024](adr/0024-versioning-and-stability.md) conditions; none is established yet | — |

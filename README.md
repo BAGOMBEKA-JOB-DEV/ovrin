@@ -336,8 +336,10 @@ architecture decision records, most of them written before the code.
 
 What that means concretely:
 
-- **No release is tagged yet.** The install commands above will not resolve
-  until one is. Until then, build from a checkout.
+- **Released.** The core is `v0.3.0`; the seven adapters and the example are
+  each at `<path>/v0.1.0`, because modules version independently
+  ([ADR-0024](docs/adr/0024-versioning-and-stability.md)). The install commands
+  above resolve.
 - **The API is not stable.** What the documentation shows is what the code
   does — the two are checked against each other on every commit — but it will
   change as it meets real documents.

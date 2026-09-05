@@ -1,8 +1,8 @@
 # Getting started
 
-> **Ovrin is implemented but not yet tagged.** The examples below work
-> against a checkout; `go get` will not resolve until there is a release. See
-> the [README's status section](../README.md#status).
+> **Ovrin is released.** The core is `v0.3.0` and the adapters are each at
+> `<path>/v0.1.0`, so every `go get` below resolves. See the
+> [README's status section](../README.md#status).
 >
 > Sections opening with a **v0.2** or **v0.3** note say which milestone a
 > feature arrived in ([ADR-0029](adr/0029-v01-scope-corrected.md)). All of them
