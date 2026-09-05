@@ -12,7 +12,7 @@ module github.com/BAGOMBEKA-JOB-DEV/ovrin/otel
 go 1.22.0
 
 require (
-	github.com/BAGOMBEKA-JOB-DEV/ovrin v0.1.0
+	github.com/BAGOMBEKA-JOB-DEV/ovrin v0.3.0
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/metric v1.35.0
 	go.opentelemetry.io/otel/sdk v1.35.0
@@ -27,9 +27,3 @@ require (
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 )
-
-// The core module has no release tag yet, so the version above is a
-// placeholder and this points it at the checkout beside us. A replace in a
-// dependency's go.mod is ignored by whoever imports it, so this affects only
-// builds of this module itself; it comes out when ovrin is tagged.
-replace github.com/BAGOMBEKA-JOB-DEV/ovrin => ..

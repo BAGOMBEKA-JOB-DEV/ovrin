@@ -15,6 +15,19 @@ prefix. Entries below say which module they affect where it is not the core.
 
 Nothing yet.
 
+## Adapter modules — 0.1.0 - 2026-09-05
+
+`model/skyl`, `ocr/google`, `ocr/azure`, `ocr/textract`, `ocr/tesseract`,
+`otel` and `render/pdfium` are each tagged `<path>/v0.1.0`. They start at 0.1.0
+rather than following the core to 0.3.0 because they version independently
+([ADR-0024](docs/adr/0024-versioning-and-stability.md)) and this is their first
+release; the core is at 0.3.0 because its milestones are what the roadmap
+numbers.
+
+Each now requires `github.com/BAGOMBEKA-JOB-DEV/ovrin v0.3.0` and carries no
+`replace` directive, so `go get` resolves them for anyone rather than only
+inside a checkout of this repository.
+
 ## [0.3.0] - 2026-09-05
 
 The first release. Everything the roadmap lists through v0.3 is implemented;
