@@ -15,7 +15,10 @@ prefix. Entries below say which module they affect where it is not the core.
 
 Nothing yet.
 
-## Adapter modules — 0.1.0 - 2026-09-05
+## [0.1.0] - 2026-09-05
+
+The seven adapter modules. One changelog serves the whole repository, so this
+section is theirs and the core's is [0.3.0] below.
 
 `model/skyl`, `ocr/google`, `ocr/azure`, `ocr/textract`, `ocr/tesseract`,
 `otel` and `render/pdfium` are each tagged `<path>/v0.1.0`. They start at 0.1.0
@@ -342,3 +345,4 @@ what v1.0 waits on is evidence, not code
 
 [Unreleased]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/compare/v0.3.0...main
 [0.3.0]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/releases/tag/v0.3.0
+[0.1.0]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/releases/tag/model%2Fskyl%2Fv0.1.0
