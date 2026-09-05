@@ -7,17 +7,8 @@ module github.com/BAGOMBEKA-JOB-DEV/ovrin/examples/receipt
 go 1.22
 
 require (
-	github.com/BAGOMBEKA-JOB-DEV/ovrin v0.1.0
+	github.com/BAGOMBEKA-JOB-DEV/ovrin v0.3.0
 	github.com/BAGOMBEKA-JOB-DEV/ovrin/model/skyl v0.1.0
 )
 
 require github.com/BAGOMBEKA-JOB-DEV/skyl v0.1.0 // indirect
-
-// Nothing in this repository is published yet, so the require lines above name
-// tags that do not exist. These point at the sibling directories instead.
-//
-// They come out the day ovrin is tagged. `make release-check VERSION=vX.Y.Z`
-// refuses a tree that still has one, which is what stops them being forgotten.
-replace github.com/BAGOMBEKA-JOB-DEV/ovrin => ../..
-
-replace github.com/BAGOMBEKA-JOB-DEV/ovrin/model/skyl => ../../model/skyl
