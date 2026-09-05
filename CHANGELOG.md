@@ -13,6 +13,14 @@ prefix. Entries below say which module they affect where it is not the core.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.0] - 2026-09-05
+
+The first release. Everything the roadmap lists through v0.3 is implemented;
+what v1.0 waits on is evidence, not code
+([ADR-0024](docs/adr/0024-versioning-and-stability.md)).
+
 ### Added
 
 - **The design, written before the code.** The architecture, the public API,
@@ -319,4 +327,5 @@ prefix. Entries below say which module they affect where it is not the core.
 - Confidence weights are provisional. Confidence is documented as a ranking
   signal, not a probability, until it is calibrated.
 
-[Unreleased]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/commits/main
+[Unreleased]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/compare/v0.3.0...main
+[0.3.0]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/releases/tag/v0.3.0
