@@ -7,8 +7,8 @@ module github.com/BAGOMBEKA-JOB-DEV/ovrin/examples/receipt
 go 1.22
 
 require (
-	github.com/BAGOMBEKA-JOB-DEV/ovrin v0.3.0
-	github.com/BAGOMBEKA-JOB-DEV/ovrin/model/skyl v0.1.0
+	github.com/BAGOMBEKA-JOB-DEV/ovrin v1.0.0
+	github.com/BAGOMBEKA-JOB-DEV/ovrin/model/skyl v1.0.0
 )
 
 require github.com/BAGOMBEKA-JOB-DEV/skyl v0.1.0 // indirect
