@@ -12,7 +12,7 @@ module github.com/BAGOMBEKA-JOB-DEV/ovrin/otel
 go 1.22.0
 
 require (
-	github.com/BAGOMBEKA-JOB-DEV/ovrin v0.3.0
+	github.com/BAGOMBEKA-JOB-DEV/ovrin v1.0.0
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/metric v1.35.0
 	go.opentelemetry.io/otel/sdk v1.35.0

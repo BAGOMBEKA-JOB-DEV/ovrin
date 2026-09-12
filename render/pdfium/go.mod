@@ -3,7 +3,7 @@ module github.com/BAGOMBEKA-JOB-DEV/ovrin/render/pdfium
 go 1.22.0
 
 require (
-	github.com/BAGOMBEKA-JOB-DEV/ovrin v0.3.0
+	github.com/BAGOMBEKA-JOB-DEV/ovrin v1.0.0
 	github.com/klippa-app/go-pdfium v1.14.1
 	github.com/tetratelabs/wazero v1.9.0
 )

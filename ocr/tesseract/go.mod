@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.2
 
 require (
-	github.com/BAGOMBEKA-JOB-DEV/ovrin v0.3.0
+	github.com/BAGOMBEKA-JOB-DEV/ovrin v1.0.0
 	github.com/danlock/gogosseract v0.0.11-0ad3421
 )
 

@@ -45,6 +45,12 @@ category error. The three conditions are unchanged and still tracked in
 [`docs/roadmap.md`](docs/roadmap.md) as the conditions for calling ovrin
 accurate.
 
+All nine modules are at `v1.0.0`, including the seven adapters and the example,
+which previously sat at `<path>/v0.1.0`. Each now requires `ovrin v1.0.0`. They
+still version independently ([ADR-0024](docs/adr/0024-versioning-and-stability.md))
+and may diverge from here; starting them together is a convenience for anyone
+reading two version numbers, not a promise that they will stay in step.
+
 ### Changed
 
 - `release-check` now asks every module whether it still resolves, not only the
