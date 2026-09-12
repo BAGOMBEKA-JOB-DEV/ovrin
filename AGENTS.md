@@ -5,8 +5,9 @@
 
 Ovrin is a Go library that turns documents — PDFs, scans, images — into
 validated, typed Go structs with per-field confidence and provenance. It is a
-public, Apache-2.0, pre-v1 open-source library that other people's production
-systems will depend on.
+public, Apache-2.0, **v1.0.0** open-source library that other people's
+production systems will depend on. The API is stable: changing an exported
+signature is a v2, not a patch ([ADR-0032](docs/adr/0032-v1-is-an-api-promise.md)).
 
 **Status check (read before assuming).** The library is implemented: nine Go
 modules, the core with zero dependencies, and every roadmap feature through

@@ -1,7 +1,8 @@
 # Getting started
 
-> **Ovrin is released.** The core is `v0.3.0` and the adapters are each at
-> `<path>/v0.1.0`, so every `go get` below resolves. See the
+> **Ovrin is at v1.0.0 and the API is stable** — no breaking change without a
+> v2 ([ADR-0032](adr/0032-v1-is-an-api-promise.md)). Every `go get` below
+> resolves. See the
 > [README's status section](../README.md#status).
 >
 > Sections opening with a **v0.2** or **v0.3** note say which milestone a

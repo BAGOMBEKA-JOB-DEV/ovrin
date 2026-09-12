@@ -52,8 +52,11 @@ Security reports are the one exception. They have stated targets, in
 [`SECURITY.md`](SECURITY.md#what-to-expect-and-the-honest-limit), and those
 targets are attempted rather than promised for the same reason.
 
-Ovrin is pre-v1. Answers may be "that is not decided yet" or "that is a known
-gap", and those are real answers rather than deflections.
+The API is stable at v1.0.0, but the accuracy work is not done. Answers may be
+"that is a known gap" or "that has not been measured", and those are real
+answers rather than deflections — early reports are more useful to this project
+than to most, because nobody outside it has yet run this in production
+([ADR-0032](docs/adr/0032-v1-is-an-api-promise.md)).
 
 ## What is out of scope
 

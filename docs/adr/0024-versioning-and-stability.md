@@ -1,6 +1,7 @@
 # ADR-0024: Pre-v1 stability policy and per-module versioning
 
-**Status:** Accepted · **Date:** 2026-08-26
+**Status:** Accepted · **Date:** 2026-08-26 · **v1.0 gate superseded by**
+[ADR-0032](0032-v1-is-an-api-promise.md)
 
 ## Context
 
@@ -70,6 +71,16 @@ rather than time:
 
 Until all four hold, ovrin stays on v0. Reaching them is expected to take
 longer than it sounds.
+
+> **Note, 2026-09-06.** This gate was superseded by
+> [ADR-0032](0032-v1-is-an-api-promise.md), and ovrin is at v1.0.0. The
+> conditions above were not met — the corpus is still synthetic, no accuracy
+> figure has been published, and no outside production deployment has reported
+> back. What changed is the reasoning, not the facts: a semantic version is a
+> promise about API compatibility, and gating one on accuracy evidence was a
+> category error in this ADR. The three unmet conditions remain the conditions
+> for calling ovrin *accurate*, tracked in [`../roadmap.md`](../roadmap.md).
+> They no longer gate the version number.
 
 ## Consequences
 

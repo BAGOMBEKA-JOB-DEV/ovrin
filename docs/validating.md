@@ -14,7 +14,7 @@ the honest version of "should you".
 
 | Question | Answer |
 |---|---|
-| Is it stable? | No. Pre-v1, breaking changes in minor releases ([ADR-0024](adr/0024-versioning-and-stability.md)) |
+| Is it stable? | The API, yes — v1.0.0, no breaking change without a v2 ([ADR-0032](adr/0032-v1-is-an-api-promise.md)). The accuracy, unmeasured — see the next row |
 | Is it accurate? | Unmeasured. No figure is published because none can be reproduced yet |
 | Is confidence trustworthy? | It ranks. It is not calibrated ([`confidence.md`](confidence.md)) |
 | Will it break my build? | Core has zero dependencies and no cgo |
@@ -105,8 +105,12 @@ cheap provider to an expensive one.
 
 Stated because a document that lists only reasons to adopt is a sales page.
 
-**You need stability now.** Pre-v1 means breaking changes in minor releases.
-Wait for v1.0, or vendor a version and accept that you are on your own.
+**You need evidence, not a version number.** v1.0.0 says the API will not break
+without a v2, and that is all it says. The corpus is synthetic, no accuracy
+figure has been published, and nobody outside the project has reported back
+from production. If what you need is a measured error rate on documents like
+yours, this cannot give you one yet, and the version number should not persuade
+you otherwise ([ADR-0032](adr/0032-v1-is-an-api-promise.md)).
 
 **You need a published accuracy guarantee.** There is none, and there will not
 be one that is not reproducible.

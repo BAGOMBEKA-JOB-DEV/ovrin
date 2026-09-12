@@ -90,6 +90,7 @@ Files are `NNNN-kebab-case-title.md`. Status is one of `Proposed`, `Accepted`,
 | [0029](0029-v01-scope-corrected.md) | The v0.1 scope, corrected | Accepted |
 | [0030](0030-an-internal-failure-sentinel.md) | A thirteenth sentinel, for ovrin's own failures | Accepted |
 | [0031](0031-documents-are-read-whole.md) | Documents are read whole; streaming is deferred | Accepted |
+| [0032](0032-v1-is-an-api-promise.md) | v1.0 is a promise about the API, not about accuracy | Accepted |
 
 ## Open questions
 

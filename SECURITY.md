@@ -30,8 +30,11 @@ Credit is given in the advisory unless you would rather it were not.
 
 ## Supported versions
 
-Pre-v1, only the latest release of each module receives fixes. There are no
-backports. See [ADR-0024](docs/adr/0024-versioning-and-stability.md).
+Only the latest release of each module receives fixes. There are no backports
+to earlier v1 minors, and none are planned while there is one maintainer
+([MAINTAINERS.md](MAINTAINERS.md)). Modules version independently
+([ADR-0024](docs/adr/0024-versioning-and-stability.md)), so "latest" means
+latest for that module.
 
 ### Which Go toolchain you need
 

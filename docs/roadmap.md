@@ -136,12 +136,17 @@ cross-validation (v0.3), provider fallback chains (v0.2), local rasterising
 
 ---
 
-## v1.0 — Trustworthy
+## v1.0 — shipped, and what it did not settle
 
-v1.0 is gated on evidence, not on features. The gate is the four conditions
-from [ADR-0024](adr/0024-versioning-and-stability.md), and all four must hold.
+**v1.0.0 is released.** It promises the API and nothing else: no breaking
+change without a v2 ([ADR-0032](adr/0032-v1-is-an-api-promise.md)).
 
-**The gate**
+The four conditions below were ADR-0024's gate for v1.0. Three remain unmet and
+are kept here unchanged, because they are still the conditions for calling
+ovrin *accurate* — which is a different claim from calling its API stable, and
+the one a version number was never going to carry.
+
+**Still open — the evidence**
 
 - [ ] **A corpus of real documents in every category, with committed reports
       across at least two provider generations.** The twenty-five committed
@@ -153,9 +158,12 @@ from [ADR-0024](adr/0024-versioning-and-stability.md), and all four must hold.
       ([ADR-0013](adr/0013-multi-signal-confidence.md)).
 - [ ] **At least one production deployment that is not the maintainer's**, with
       its feedback incorporated.
-- [ ] **No known API change we would want to make.**
+- [x] **No known API change we would want to make.** Three additions are
+      wanted — `Usage` cache fields, a handwriting kind on `Word`, and
+      rendering `Layout.Pairs` — and all three are additive, so none is a
+      breaking change. This is the one condition v1.0.0 actually rests on.
 
-**Work items wanted before v1.0**
+**Work items still wanted**
 
 These are features, not conditions: shipping them does not open the gate, and
 the gate does not wait on them.

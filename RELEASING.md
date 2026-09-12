@@ -114,6 +114,34 @@ lists the others as context. Seeing seven modules reported as still carrying a
 replace during the core release is the expected output, not a warning to act
 on.
 
+### But the whole tree is checked for resolution
+
+Scoping the `replace` check to one module leaves a hole, and the v0.3.0 release
+fell into it.
+
+Removing a `replace` from one module changes what its *dependents* resolve to.
+`examples/receipt` reaches `model/skyl` through a local `replace`, so the
+moment the seven adapters were repointed at the published core, the example's
+`go.mod` was stale — it now needed a core version its `go.sum` had never seen.
+That commit passed `release-check`, because `release-check` was looking at the
+adapters, and every `examples/receipt` job in CI failed on it.
+
+So after the per-module checks, every module in the tree is asked whether it
+still resolves at all:
+
+```text
+  ok    every module in the tree still resolves
+```
+
+`go list -m all` in each module, without `-e`. The `-e` flag tolerates a broken
+module graph and reports it as data, which is exactly the wrong behaviour for a
+gate — the first version of this check used it and missed the very commit it
+was written for.
+
+The practical rule this encodes: **repoint every tier in one commit, not one
+commit per tier.** The three tiers below exist because of the proxy waits, not
+because the repository should sit in a half-repointed state.
+
 ### The changelog heading it looks for
 
 `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

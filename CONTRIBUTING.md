@@ -4,11 +4,14 @@ Thank you for considering it. This document covers the mechanics. The
 engineering standard is [`docs/rules.md`](docs/rules.md), and review will
 enforce it.
 
-> **Ovrin is pre-v1.** The library is implemented and every feature on the
-> roadmap through v0.3 exists; what v1.0 waits on is evidence rather than code
-> ([ADR-0024](docs/adr/0024-versioning-and-stability.md)). The most valuable
-> contributions today are corpus documents, provider adapters, and
-> disagreement with an ADR that is wrong.
+> **Ovrin is at v1.0.0 and the API is stable** — a breaking change now needs a
+> v2 ([ADR-0032](docs/adr/0032-v1-is-an-api-promise.md)), so a pull request
+> that changes an exported signature has a high bar to clear. Additions do not.
+>
+> Accuracy is a different matter and is still unmeasured, which is why the most
+> valuable contributions remain **real corpus documents we are allowed to
+> redistribute**, provider adapters, and disagreement with an ADR that is
+> wrong.
 
 ---
 

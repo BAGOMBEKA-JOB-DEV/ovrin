@@ -346,7 +346,13 @@ ci: check test-cover cover-floor deps-check cross ## Everything CI runs
 # VERSION is the tag exactly as it will be pushed. In a multi-module repository
 # that means it may carry the module's path prefix:
 #
-#     make release-check VERSION=v0.3.0              the core
+#     make release-check VERSION=v0.3.0
+#
+# It checks the whole tree, not only the module being tagged. Removing a
+# replace from one module changes what its dependents resolve to, and during
+# the v0.3.0 release that broke examples/receipt in the commit between the
+# adapters being fixed and it being fixed — a state that passed this check,
+# because this check only looked at the module named on the command line.              the core
 #     make release-check VERSION=model/skyl/v0.1.0   one module
 #
 # The module being released is derived from that prefix. MODULE= overrides the
@@ -418,6 +424,19 @@ release-check: ## Report whether this tree is fit to tag. VERSION=v0.3.0
 		echo "  note  still carrying a replace, not released here:$$others"; \
 		echo "        expected until each is tagged in its turn — RELEASING.md"; \
 	fi; \
+	broken=; \
+	for m in $(MODULES); do \
+		m="$${m#./}"; \
+		if ! ( cd "$$m" && $(GO) list -m all >/dev/null 2>&1 ); then \
+			broken="$$broken $$m"; \
+		fi; \
+	done; \
+	if [ -n "$$broken" ]; then \
+		echo "  FAIL  these modules no longer resolve:$$broken"; \
+		echo "        run 'go mod tidy' in each — removing a replace from one"; \
+		echo "        module changes what its dependents need"; \
+		fail=1; \
+	else echo "  ok    every module in the tree still resolves"; fi; \
 	echo; \
 	if [ $$fail -ne 0 ]; then \
 		echo "not releasable. nothing was tagged and nothing was pushed."; exit 1; \

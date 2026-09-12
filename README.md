@@ -2,7 +2,15 @@
 
 [![CI](https://github.com/BAGOMBEKA-JOB-DEV/ovrin/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/BAGOMBEKA-JOB-DEV/ovrin/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/BAGOMBEKA-JOB-DEV/ovrin.svg)](https://pkg.go.dev/github.com/BAGOMBEKA-JOB-DEV/ovrin)
+[![Go Report Card](https://goreportcard.com/badge/github.com/BAGOMBEKA-JOB-DEV/ovrin)](https://goreportcard.com/report/github.com/BAGOMBEKA-JOB-DEV/ovrin)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
+```bash
+go get github.com/BAGOMBEKA-JOB-DEV/ovrin@v1.0.0
+```
+
+**Package:** [`github.com/BAGOMBEKA-JOB-DEV/ovrin`](https://pkg.go.dev/github.com/BAGOMBEKA-JOB-DEV/ovrin) ·
+**v1.0.0** · Go 1.22+ · zero dependencies · no cgo
 
 **Turn documents into structured data.**
 
@@ -168,7 +176,7 @@ Run `make` with no arguments at any time to list every target.
 | Command | What it does |
 |---|---|
 | `make run-example` | Extract [the example receipt](examples/receipt) with a real model. Needs `OPENAI_API_KEY` |
-| `make release-check VERSION=v0.3.0` | Report whether the tree is fit to tag. Never tags, never pushes. Takes a module-prefixed tag too, e.g. `model/skyl/v0.1.0` |
+| `make release-check VERSION=v1.0.0` | Report whether the tree is fit to tag. Never tags, never pushes. Takes a module-prefixed tag too, e.g. `model/skyl/v1.0.0` |
 | `make clean` | Remove build and coverage output |
 
 **Docker** — the toolchain pinned, nothing to install
@@ -330,27 +338,30 @@ Contributors and coding agents should start with [`AGENTS.md`](AGENTS.md).
 
 ## Status
 
-**Pre-v1.** The library is implemented — nine Go modules, the core with zero
-dependencies, and every feature on the roadmap through v0.3 — on top of thirty-one
-architecture decision records, most of them written before the code.
+**v1.0.0 — the API is stable.** Nine Go modules, the core with zero
+dependencies, on top of thirty-two architecture decision records, most of them
+written before the code. A breaking change now requires a v2
+([ADR-0032](docs/adr/0032-v1-is-an-api-promise.md)).
 
-What that means concretely:
+**That is a promise about compatibility, not about accuracy.** The two are
+separable and this project keeps them separate, because a version number is a
+poor place to hide a caveat:
 
-- **Released.** The core is `v0.3.0`; the seven adapters and the example are
-  each at `<path>/v0.1.0`, because modules version independently
-  ([ADR-0024](docs/adr/0024-versioning-and-stability.md)). The install commands
-  above resolve.
-- **The API is not stable.** What the documentation shows is what the code
-  does — the two are checked against each other on every commit — but it will
-  change as it meets real documents.
-- **No accuracy figure has been published**, and none will be until the
-  evaluation harness can reproduce it ([ADR-0023](docs/adr/0023-evaluation-corpus.md)).
-- **Confidence weights are provisional.** Confidence is a ranking signal today,
-  not a probability. See [`docs/confidence.md`](docs/confidence.md).
+| | |
+|---|---|
+| The API will not break without a v2 | **Yes.** `api/ovrin.txt` is a contract, checked on every commit |
+| Published accuracy figure | **None.** The evaluation corpus is synthetic, and no run has been committed ([ADR-0023](docs/adr/0023-evaluation-corpus.md)) |
+| Confidence is a calibrated probability | **No.** It is a ranking signal. It orders a review queue well; it does not mean "correct this often" ([`docs/confidence.md`](docs/confidence.md)) |
+| Used in production outside this project | **Not that we know of.** If you do, please say so |
 
-Ovrin will remain on v0 until the design has been used on real documents by
-people who are not the maintainer. The conditions for v1.0 are written down in
-[ADR-0024](docs/adr/0024-versioning-and-stability.md).
+Released: the core at `v1.0.0`, and the seven adapters and the example each at
+`<path>/v1.0.0`. Modules version independently
+([ADR-0024](docs/adr/0024-versioning-and-stability.md)), so they may diverge
+from here.
+
+If you are deciding whether to depend on this,
+[`docs/validating.md`](docs/validating.md) is written for you and includes the
+reasons not to.
 
 ## Contributing
 

@@ -1,10 +1,24 @@
 # Documentation
 
+```bash
+go get github.com/BAGOMBEKA-JOB-DEV/ovrin@v1.0.0
+```
+
+**Package:** [`github.com/BAGOMBEKA-JOB-DEV/ovrin`](https://pkg.go.dev/github.com/BAGOMBEKA-JOB-DEV/ovrin) ·
+**v1.0.0** · Go 1.22+ · zero dependencies · no cgo ·
+[API reference](https://pkg.go.dev/github.com/BAGOMBEKA-JOB-DEV/ovrin)
+
 Ovrin turns documents into typed Go values. This directory holds the design.
 
-**The library is implemented; no release is tagged yet.** See the
-[status section](../README.md#status). This directory holds the design that
-came first, and the documentation checks keep it honest about the code.
+**v1.0.0 is stable: the API will not break without a v2**
+([ADR-0032](adr/0032-v1-is-an-api-promise.md)). That promise is about
+compatibility and not about accuracy — confidence is still a ranking signal
+rather than a calibrated probability, and [validating.md](validating.md) says
+exactly what has and has not been demonstrated. Read it before depending on
+this for something that matters.
+
+Most of what is here was written before the code, and the documentation checks
+keep it honest about the code.
 
 ## Guides
 

@@ -5,8 +5,9 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Until v1.0.0, breaking changes may land in minor releases. They will always be
-listed here with a migration note.
+From v1.0.0 the public API is stable: a breaking change requires a major
+version ([ADR-0032](docs/adr/0032-v1-is-an-api-promise.md)). Additions land in
+minor releases and are listed here.
 
 Modules in this repository version independently and are tagged with their path
 prefix. Entries below say which module they affect where it is not the core.
@@ -14,6 +15,44 @@ prefix. Entries below say which module they affect where it is not the core.
 ## [Unreleased]
 
 Nothing yet.
+
+## [1.0.0] - 2026-09-12
+
+**The API is stable.** A breaking change now requires a v2
+([ADR-0032](docs/adr/0032-v1-is-an-api-promise.md)). All nine modules are
+tagged `v1.0.0`.
+
+Nothing in the library changed. This release is a promise, not a diff: the code
+is v0.3.0's, tested by the maintainer against real documents and judged ready
+to be depended on.
+
+### What v1.0.0 does not promise
+
+Said here because a version number is a poor place to hide a caveat, and
+because [ADR-0024](docs/adr/0024-versioning-and-stability.md) originally gated
+v1.0 on exactly these:
+
+- **No accuracy figure has been published.** The evaluation corpus is
+  twenty-five synthetic documents, and the only committed report is `no-run`,
+  which contains zeros rather than measurements.
+- **Confidence is not calibrated.** `Result.Confidence` remains a ranking
+  signal, not a probability, and its documentation still says so.
+- **Nobody outside the project has reported back from production.**
+
+ADR-0032 explains why those stopped gating the version number: semver is a
+statement about compatibility, and gating it on accuracy evidence was a
+category error. The three conditions are unchanged and still tracked in
+[`docs/roadmap.md`](docs/roadmap.md) as the conditions for calling ovrin
+accurate.
+
+### Changed
+
+- `release-check` now asks every module whether it still resolves, not only the
+  one being tagged. Removing a `replace` from one module changes what its
+  dependents need, and during the v0.3.0 release that broke `examples/receipt`
+  in the commit between the adapters being repointed and it being repointed —
+  a state the old check passed. `RELEASING.md` records the rule it encodes:
+  repoint every tier in one commit.
 
 ## [0.1.0] - 2026-09-05
 
@@ -343,6 +382,7 @@ what v1.0 waits on is evidence, not code
 - Confidence weights are provisional. Confidence is documented as a ranking
   signal, not a probability, until it is calibrated.
 
-[Unreleased]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/compare/v0.3.0...main
+[Unreleased]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/compare/v1.0.0...main
+[1.0.0]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/releases/tag/v1.0.0
 [0.3.0]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/releases/tag/v0.3.0
 [0.1.0]: https://github.com/BAGOMBEKA-JOB-DEV/ovrin/releases/tag/model%2Fskyl%2Fv0.1.0
