@@ -5,19 +5,21 @@ is what prevents a bad release.
 
 Ovrin is a multi-module repository ([ADR-0024](docs/adr/0024-versioning-and-stability.md)).
 Each module versions independently and is tagged with its path prefix. All nine
-modules, and the tag each one takes:
+modules, and the tag each one is at today:
 
 ```text
-v0.3.0                        the core
-model/skyl/v0.1.0
-ocr/tesseract/v0.1.0
-ocr/google/v0.1.0
-ocr/azure/v0.1.0
-ocr/textract/v0.1.0
-render/pdfium/v0.1.0
-otel/v0.1.0
-examples/receipt/v0.1.0
+v1.0.0                        the core
+model/skyl/v1.0.0
+ocr/tesseract/v1.0.0
+ocr/google/v1.0.0
+ocr/azure/v1.0.0
+ocr/textract/v1.0.0
+render/pdfium/v1.0.0
+otel/v1.0.0
+examples/receipt/v1.0.0
 ```
+
+They reached v1.0.0 together and may diverge from here.
 
 `examples/receipt` is on that list because it is a module with its own `go.mod`,
 and Go does not offer a way to have a directory be a module and not be
@@ -36,8 +38,9 @@ The seven adapters and `examples/receipt` started at `<path>/v0.1.0` instead,
 because they version independently and it was their first release. A module's
 number describes that module.
 
-That release is done — `v0.3.0`, 2026-09-05. What follows is the procedure for
-the next one, which unlike the first can be verified against a predecessor.
+That release is done — `v0.3.0`, 2026-09-05 — and so is `v1.0.0`, 2026-09-12.
+What follows is the procedure for the next release, which can be verified
+against a predecessor.
 
 ## Before tagging anything
 
@@ -51,10 +54,14 @@ every step below is paranoid.
 under a bold lead, saying what changed and what a user must do about it. A list
 of commit subjects is not a changelog.
 
-**Breaking changes must have a migration note.** Before v1 they may land in a
-minor release, but never silently.
+**Breaking changes must have a migration note.** Since v1.0.0 a breaking change
+also requires a new major version
+([ADR-0032](docs/adr/0032-v1-is-an-api-promise.md)): it is never a minor
+release, and never silent.
 
 ## Cutting a release
+
+Using `v1.1.0`, which does not exist yet, as the example:
 
 ```bash
 # 1. Confirm the tree is clean and main is green
@@ -62,21 +69,21 @@ git checkout main && git pull && git status
 
 # 2. Move [Unreleased] into a dated section
 $EDITOR CHANGELOG.md
-git commit -s -m "chore: release v0.3.0"
+git commit -s -m "chore: release v1.1.0"
 
 # 3. Check what is about to be released
-make release-check VERSION=v0.3.0
+make release-check VERSION=v1.1.0
 
 # 4. Tag and push, deliberately, by hand
-git tag -s v0.3.0 -m "v0.3.0"
-git push origin main v0.3.0
+git tag -s v1.1.0 -m "v1.1.0"
+git push origin main v1.1.0
 ```
 
 `VERSION` is the tag exactly as it will be pushed, prefix and all. For the core
-that is `v0.3.0`; for a module it is the full tag:
+that is `v1.1.0`; for a module it is the full tag:
 
 ```bash
-make release-check VERSION=model/skyl/v0.1.0
+make release-check VERSION=model/skyl/v1.1.0
 ```
 
 The module being released is derived from that prefix, so there is nothing else
@@ -96,23 +103,23 @@ eventually publish on the strength of a check that was silently skipped.
 
 ### Why the replace check is scoped to one module
 
-Every non-root module carries
+Until the first release, every non-root module carried
 
 ```text
 replace github.com/BAGOMBEKA-JOB-DEV/ovrin => ../..
 ```
 
-and must keep it until the core is tagged *and* `proxy.golang.org` has fetched
-that tag, because until then the version its `go.mod` requires does not exist
-and the module will not build for anyone.
+and had to keep it until the core was tagged *and* `proxy.golang.org` had
+fetched that tag, because until then the version its `go.mod` required did not
+exist and the module would not build for anyone. No module carries one now.
 
 An earlier version of this check refused any tree in which *any* module had a
 `replace`. That made the first release impossible in both directions: the
-replaces cannot come out before the core tag, and the core tag could not be cut
-while they were there. The check therefore reads the module under release and
-lists the others as context. Seeing seven modules reported as still carrying a
-replace during the core release is the expected output, not a warning to act
-on.
+replaces could not come out before the core tag, and the core tag could not be
+cut while they were there. The check therefore reads the module under release
+and lists the others as context. If a module ever needs a `replace` again —
+while it depends on a core change that is not yet tagged — other modules
+reported as carrying one are the expected output, not a warning to act on.
 
 ### But the whole tree is checked for resolution
 
@@ -120,9 +127,9 @@ Scoping the `replace` check to one module leaves a hole, and the v0.3.0 release
 fell into it.
 
 Removing a `replace` from one module changes what its *dependents* resolve to.
-`examples/receipt` reaches `model/skyl` through a local `replace`, so the
+`examples/receipt` reached `model/skyl` through a local `replace`, so the
 moment the seven adapters were repointed at the published core, the example's
-`go.mod` was stale — it now needed a core version its `go.sum` had never seen.
+`go.mod` was stale — it needed a core version its `go.sum` had never seen.
 That commit passed `release-check`, because `release-check` was looking at the
 adapters, and every `examples/receipt` job in CI failed on it.
 
@@ -148,11 +155,11 @@ because the repository should sit in a half-repointed state.
 which writes the heading without a `v`:
 
 ```text
-## [0.3.0] - 2026-08-26
+## [1.0.0] - 2026-09-12
 ```
 
 `release-check` strips any module path prefix from `VERSION` and treats the
-leading `v` as optional, so `v0.3.0` and `model/skyl/v0.1.0` both find the
+leading `v` as optional, so `v1.0.0` and `model/skyl/v1.0.0` both find the
 heading they should. One changelog serves the whole repository, so a module
 release looks for its own version number in that same file, and its entries say
 which module they affect.
@@ -163,14 +170,14 @@ Three tiers, not two, and each tier waits for the proxy to have the tier above
 it. An adapter release must require a core version that already exists in the
 proxy, or `go get` fails for the first person to try it.
 
-1. **The core.** `v0.3.0`. Nothing in the repository can be released before it.
+1. **The core.** Nothing in the repository can be released before it.
 2. **The seven adapters.** `model/skyl`, `ocr/tesseract`, `ocr/google`,
    `ocr/azure`, `ocr/textract`, `render/pdfium`, `otel`. They depend on the
    core and on nothing else in this repository, so once the core is on the
    proxy they can go in any order, or all at once.
 3. **`examples/receipt`.** It requires `model/skyl` as well as the core, so it
-   needs a *second* wait: `model/skyl` must be tagged and on the proxy before
-   its `replace` lines can come out.
+   needs a *second* wait: the `model/skyl` version it requires must be tagged
+   and on the proxy first.
 
 After tagging anything, wait for `proxy.golang.org` to have it before releasing
 whatever depends on it:
@@ -180,9 +187,9 @@ curl -s https://proxy.golang.org/github.com/!b!a!g!o!m!b!e!k!a-!j!o!b-!d!e!v/ovr
 curl -s https://proxy.golang.org/github.com/!b!a!g!o!m!b!e!k!a-!j!o!b-!d!e!v/ovrin/model/skyl/@v/list
 ```
 
-Then, for each module in the tier below: delete its `replace` lines, set the
-`require` lines to the versions that now exist, run `make check`, commit, and
-run `make release-check VERSION=<its tag>` before tagging it.
+Then, for each module in the tier below: set its `require` lines to the versions
+that now exist, run `make check`, commit, and run
+`make release-check VERSION=<its tag>` before tagging it.
 
 Two waits means the whole sequence cannot be done in one sitting without
 pausing twice. That is the cost of `examples/receipt` being a module, and it is
@@ -200,10 +207,11 @@ paid once per release.
 You cannot unpublish. The options, in order of preference:
 
 1. **Fix forward.** Release the next patch immediately.
-2. **Retract**, for a version that is actively harmful:
+2. **Retract**, for a version that is actively harmful. For example, with a
+   version that has not been released:
 
    ```text
-   retract v0.3.0 // Extracted values could reach trace attributes.
+   retract v1.0.1 // Extracted values could reach trace attributes.
    ```
 
    Commit the `retract` directive, tag the next patch. Retraction warns people

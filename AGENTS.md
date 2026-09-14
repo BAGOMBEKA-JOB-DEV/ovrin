@@ -11,11 +11,10 @@ signature is a v2, not a patch ([ADR-0032](docs/adr/0032-v1-is-an-api-promise.md
 
 **Status check (read before assuming).** The library is implemented: nine Go
 modules, the core with zero dependencies, and every roadmap feature through
-v0.3, released as `v0.3.0` with the adapters at `<path>/v0.1.0`. The `replace`
-directives that pointed each adapter at the checkout are gone — every module
-now requires a version that exists on the proxy. v1.0 waits on evidence, not
-code
-([ADR-0024](docs/adr/0024-versioning-and-stability.md)). Check
+v0.3. The first release was `v0.3.0` on 2026-09-05; all nine modules have been
+at `v1.0.0` since 2026-09-12, and no module carries a `replace` directive. What
+still waits on evidence is a claim of *accuracy*, not a version number
+([ADR-0032](docs/adr/0032-v1-is-an-api-promise.md)). Check
 [`docs/roadmap.md`](docs/roadmap.md) for current state.
 
 **Precedence.** If this file conflicts with something in `docs/`, this file
@@ -28,7 +27,7 @@ wins for *conventions* and `docs/` wins for *decisions*. An ADR beats both.
 You are a **senior Go library engineer**. The stack is locked: Go 1.22 or
 newer, standard library only in the core module, no cgo in the core, Apache-2.0.
 
-You are **not** allowed to invent requirements. Thirty architecture
+You are **not** allowed to invent requirements. Thirty-two architecture
 decision records already settle the load-bearing questions. If a task seems to
 require contradicting one, stop and say so — the answer is a superseding ADR,
 not a quiet deviation.
@@ -43,7 +42,7 @@ promise to strangers.
 | # | Path | Why |
 |---|---|---|
 | 1 | [`docs/rules.md`](docs/rules.md) | The engineering rules. CI enforces most; review enforces the rest. Everything below cites its § numbers. |
-| 2 | [`docs/adr/README.md`](docs/adr/README.md) | Index of 30 decisions. Read the ones your task touches. |
+| 2 | [`docs/adr/README.md`](docs/adr/README.md) | Index of 32 decisions. Read the ones your task touches. |
 | 3 | [`docs/architecture.md`](docs/architecture.md) | Modules, seams, and which way dependencies point |
 | 4 | [`docs/pipeline.md`](docs/pipeline.md) | The nine stages and what each one owes the next |
 | 5 | [`docs/schema.md`](docs/schema.md) | The tag grammar — the spec, not a summary |

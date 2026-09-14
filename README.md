@@ -85,8 +85,8 @@ use, and nothing else enters your `go.sum`:
 go get github.com/BAGOMBEKA-JOB-DEV/ovrin/model/skyl      # OpenAI, Anthropic, Gemini, Ollama, …
 go get github.com/BAGOMBEKA-JOB-DEV/ovrin/ocr/tesseract   # local OCR
 go get github.com/BAGOMBEKA-JOB-DEV/ovrin/ocr/google      # Cloud Vision / Document AI
-go get github.com/BAGOMBEKA-JOB-DEV/ovrin/render/pdfium   # v0.2 — rasterise scanned PDFs, no cgo
-go get github.com/BAGOMBEKA-JOB-DEV/ovrin/otel            # v0.2 — OpenTelemetry
+go get github.com/BAGOMBEKA-JOB-DEV/ovrin/render/pdfium   # rasterise scanned PDFs, no cgo
+go get github.com/BAGOMBEKA-JOB-DEV/ovrin/otel            # OpenTelemetry
 ```
 
 Go 1.22 or newer. (That is a *language* floor. For the toolchain to build
@@ -329,7 +329,7 @@ Validation
 | [Evaluation](docs/evaluation.md) | How accuracy is measured |
 | [Roadmap](docs/roadmap.md) | What is next, and what is deliberately deferred |
 | [Rules](docs/rules.md) | The engineering rules this codebase is held to |
-| [Decisions](docs/adr/) | 31 ADRs — why it is like this |
+| [Decisions](docs/adr/) | 32 ADRs — why it is like this |
 | [Glossary](docs/glossary.md) | Terms used throughout |
 
 Contributors and coding agents should start with [`AGENTS.md`](AGENTS.md).

@@ -255,8 +255,10 @@ within a deployment, not across organisations.
 ## Calibration
 
 Calibration — establishing that a score of 0.8 corresponds to being correct
-about 80% of the time — requires labelled documents and is v1.0 work
-([ADR-0024](adr/0024-versioning-and-stability.md)).
+about 80% of the time — requires labelled documents. It did not gate v1.0.0,
+which promises the API and nothing else
+([ADR-0032](adr/0032-v1-is-an-api-promise.md)); it remains open on the
+[roadmap](roadmap.md) as a condition for calling ovrin accurate.
 
 The harness reports expected calibration error and accuracy within confidence
 bands ([ADR-0023](adr/0023-evaluation-corpus.md)). Until those numbers are

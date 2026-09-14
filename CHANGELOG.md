@@ -378,8 +378,9 @@ what v1.0 waits on is evidence, not code
 
 ### Notes
 
-- No release has been made. The install commands in the README will not work
-  yet.
+- This is the first release: the core at `v0.3.0`, with the seven adapters and
+  the example at `<path>/v0.1.0` ([0.1.0]). The install commands in the README
+  now resolve.
 - The Go API in the documentation is a specification, not a description. It
   will change as it meets real documents.
 - No accuracy figure is published, and none will be until the evaluation
