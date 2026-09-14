@@ -10,8 +10,8 @@ answer than the caller believes they asked for.
 
 > **The provider rows are measurements, not intentions.** Every adapter in
 > them exists and passes the shared contract suite, and every ⚠️ cell is a
-> behaviour that suite asserts. The `v1.0` column of the last table is the
-> exception: that one is a plan.
+> behaviour that suite asserts. The `v1.0` column of the last table used to be
+> a plan; v1.0.0 has shipped, so it now records what that release contains.
 
 **Legend**
 
@@ -177,7 +177,7 @@ column here, and until then it does not.
 | Circuit breaking | ⛔ | ⛔ | ✅ | ✅ |
 | Hooks | ✅ | ✅ | ✅ | ✅ |
 | OpenTelemetry | ⛔ | ✅ | ✅ | ✅ |
-| Calibrated confidence | ⛔ | ⛔ | ⛔ | ✅ |
+| Calibrated confidence | ⛔ | ⛔ | ⛔ | ⛔ a ranking signal, not a probability — [ADR-0032](adr/0032-v1-is-an-api-promise.md) |
 | Batch processing | ⛔ | ⛔ | ✅ | ✅ |
 | Streaming documents larger than memory | ⛔ | ⛔ | ⛔ | ⛔ deferred, [ADR-0031](adr/0031-documents-are-read-whole.md) |
 

@@ -14,9 +14,9 @@ reply:
   confidence model and the threat model.
 - [`docs/getting-started.md`](docs/getting-started.md) — if the answer you want
   is "how do I do the thing at all".
-- [`docs/adr/`](docs/adr/) — thirty decision records. Nearly every "why not X"
-  is in one of them, together with the alternatives that lost and what the
-  choice cost.
+- [`docs/adr/`](docs/adr/) — thirty-two decision records. Nearly every "why
+  not X" is in one of them, together with the alternatives that lost and what
+  the choice cost.
 - [`docs/feature-matrix.md`](docs/feature-matrix.md) — what each adapter
   actually supports, including the options it silently ignores.
 

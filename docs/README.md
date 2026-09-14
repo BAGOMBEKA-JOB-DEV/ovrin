@@ -45,7 +45,7 @@ keep it honest about the code.
 
 ## Architecture decision records
 
-Thirty decisions, each with the alternatives that lost and the costs that
+Thirty-two decisions, each with the alternatives that lost and the costs that
 were accepted. The [index](adr/README.md) has the full list; these are the ones
 that shape the most.
 
@@ -70,6 +70,6 @@ that shape the most.
 | What does it send to third parties? | [data-handling.md](data-handling.md) |
 | Is it safe against hostile documents? | [threat-model.md](threat-model.md) |
 | Will it break my build? | Zero dependencies, no cgo — [architecture.md](architecture.md) |
-| Will the API change? | Yes, before v1 — [ADR-0024](adr/0024-versioning-and-stability.md) |
+| Will the API change? | Additions, yes. A breaking change needs a v2 — [ADR-0032](adr/0032-v1-is-an-api-promise.md) |
 | What does a provider not support? | [feature-matrix.md](feature-matrix.md) |
 | Can one person maintain this? | [../MAINTAINERS.md](../MAINTAINERS.md) says the bus factor out loud |

@@ -2,9 +2,10 @@
 
 Ordered by what blocks adoption, not by what is interesting to build.
 
-**Everything through v0.3 is implemented.** What remains is v1.0, and v1.0 is
-gated on evidence rather than on code. This document says what was built, in
-what order, and what is still owed.
+**v1.0.0 has shipped, and the API is stable.** What remains is evidence rather
+than code: the conditions for calling ovrin *accurate*, which a version number
+was never going to carry. This document says what was built, in what order,
+and what is still owed.
 
 ---
 

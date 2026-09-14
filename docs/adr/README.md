@@ -104,5 +104,4 @@ Decisions we know we will have to make, deliberately not made yet.
 | Streaming documents that do not fit in memory | A calibrated corpus first ([ADR-0031](0031-documents-are-read-whole.md)) |
 | Encrypted PDF support | Demand ([ADR-0011](0011-pdf-text-extraction.md)) |
 | A trained confidence calibrator | A labelled corpus ([ADR-0023](0023-evaluation-corpus.md)) |
-| DOCX, XLSX and CSV sources | v0.3 ([`../roadmap.md`](../roadmap.md)) |
-| A CLI and an HTTP service | v1.0 ([`../roadmap.md`](../roadmap.md)) |
+| A CLI and an HTTP service | An ADR each — listed beyond v1.0 in [`../roadmap.md`](../roadmap.md) |

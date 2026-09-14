@@ -115,7 +115,9 @@ you otherwise ([ADR-0032](adr/0032-v1-is-an-api-promise.md)).
 **You need a published accuracy guarantee.** There is none, and there will not
 be one that is not reproducible.
 
-**You need calibrated probabilities today.** v1.0 work.
+**You need calibrated probabilities today.** Calibration needs a labelled
+corpus of real documents, which does not exist yet, and it is not tied to a
+version — it is open on the [roadmap](roadmap.md).
 
 **Your documents are all one fixed layout.** A template-based extractor, or a
 dedicated OCR API with a per-document price, will beat a general pipeline on
